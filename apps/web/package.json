@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "start": "node dist-server/serve.js",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.server.json",
-    "test": "vitest run"
+    "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
     "@btv/shared": "*",

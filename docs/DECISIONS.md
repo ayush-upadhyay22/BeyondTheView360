@@ -155,3 +155,49 @@ runs) can share one Redis without stealing each other's jobs.
 **D30. Production bundles.** `tsup` bundles each server app with the workspace packages inlined
 and every npm dependency (including those of `@btv/core`) left external, giving a single
 `dist/server.js` / `dist/main.js` that runs with `node` against `node_modules`.
+
+## Phase 5 — Viewer
+
+**D31. Own viewer engine on plain Three.js.** `PanoramaEngine` is a small framework-free class
+(sphere + perspective camera, ~600 lines) rather than a third-party panorama library. It owns
+input (pointer drag with inertia, pinch, wheel, keyboard via the React wrapper), autorotate, gyro,
+stereo split rendering and texture loading. React (`TourPlayer`) only handles UI state. The render
+loop is dirty-flag driven, so an idle viewer costs ~no GPU time.
+
+**D32. Yaw/pitch convention.** Yaw 0 is the horizontal centre of the equirectangular image and
+looks down −Z; positive yaw turns right; pitch is positive upward; degrees everywhere in the API.
+The sphere is mirrored (`scale(-1,1,1)`) so the image is seen un-mirrored from inside, and rotated
+by −90° so the image centre sits at yaw 0. The same maths lives in `@btv/shared/geometry` and is
+unit-tested, so editor clicks, stored hotspots and the viewer always agree.
+
+**D33. North offset and heading-preserving navigation.** Each scene stores `northOffset` (the yaw
+that faces real north). When following a link, the viewer keeps the user's compass heading across
+scenes (`newYaw = oldYaw − oldNorth + newNorth`) unless the target scene has an explicit start view.
+
+**D34. Progressive loading.** Show the inline blurred placeholder immediately, then the variant
+picked by `selectVariant` (≈2048 on phones, 4096 on desktop, 8192 on ≥3840 physical px or when the
+user presses HD), capped by `gl.MAX_TEXTURE_SIZE`. Textures are cached in a small LRU (5) keyed by
+`sceneId:width` — not by URL, because signed URLs change — and linked scenes are preloaded.
+
+**D35. Hotspots are DOM elements.** Markers are real `<button>`s repositioned every frame by
+writing `transform` directly (no React re-render), which gives keyboard focus, aria-labels, hover
+labels and easy drag-to-move in the editor for free. In stereo (VR) mode DOM can't be split per
+eye, so the engine renders sprite markers instead and activates a hotspot after a 1.5 s gaze dwell.
+
+**D36. Accessibility and motion.** Autorotate is off when `prefers-reduced-motion` is set and stops
+on the first interaction. Every control has an aria-label; the stage is focusable with arrow keys
+(Shift = bigger steps) and +/−. Gyro uses `DeviceOrientationEvent.requestPermission()` on iOS from
+a user gesture; fullscreen falls back to a fixed-position pseudo-fullscreen where the API is
+missing (iPhone Safari).
+
+**D37. Production web server and CSP.** `apps/web/server/serve.ts` (Express + helmet) serves the
+built SPA with a strict CSP (`script-src 'self'`, no inline scripts; inline _style attributes_ are
+allowed because markers are positioned with them). `frame-ancestors` is `'self'` everywhere except
+`/embed/*`, which uses `EMBED_FRAME_ANCESTORS` (default `*`). Media origins (S3/CDN) are added to
+`img-src`/`connect-src` via `CSP_MEDIA_ORIGINS`. Hashed assets are `immutable`; `index.html` is
+`no-cache`. An optional `/api` proxy lets the web container front the API without a load balancer.
+The Vite dev server mirrors the framing rules.
+
+**D38. Web unit tests use their own Vitest config.** The root Vitest (2.x) ships Vite 5 while the
+app builds with Vite 6; `vitest.config.ts` avoids loading the app's Vite plugins, and
+`vite.config.ts` is left out of the app `tsc` project to avoid the duplicate-type clash.
