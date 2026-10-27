@@ -1,0 +1,36 @@
+{
+  "name": "@btv/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && tsup server/serve.ts --format esm --platform node --target node20 --out-dir dist-server --clean",
+    "preview": "vite preview",
+    "start": "node dist-server/serve.js",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.server.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@btv/shared": "*",
+    "@tanstack/react-query": "5.105.0",
+    "express": "5.3.0",
+    "helmet": "8.3.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-router-dom": "6.30.6",
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "@types/three": "0.170.0",
+    "@vitejs/plugin-react": "4.7.0",
+    "autoprefixer": "10.6.2",
+    "postcss": "8.5.32",
+    "tailwindcss": "3.4.19",
+    "tsup": "8.5.1",
+    "vite": "6.4.5"
+  }
+}

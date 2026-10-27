@@ -1,3 +1,25 @@
+# dependencies
 node_modules/
-data.db*
+
+# build output
+dist/
+coverage/
+*.tsbuildinfo
+
+# env files (never commit real secrets; .env.example files are committed)
 .env
+.env.*
+!.env.example
+
+# generated / user-provided panoramas
+samples/*
+!samples/README.md
+!samples/.gitkeep
+
+# logs & OS junk
+*.log
+npm-debug.log*
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/

@@ -1,0 +1,27 @@
+{
+  "name": "@btv/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/main.ts",
+    "start": "node dist/main.js",
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --dir test/unit",
+    "samples:generate": "tsx scripts/generate-samples.ts"
+  },
+  "dependencies": {
+    "@btv/core": "*",
+    "@btv/shared": "*",
+    "bullmq": "5.81.5",
+    "sharp": "0.34.5"
+  },
+  "devDependencies": {
+    "tsup": "8.5.1"
+  }
+}

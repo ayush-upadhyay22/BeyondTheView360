@@ -1,0 +1,79 @@
+# Local infrastructure for BeyondTheView360.
+# Apps (web, api, worker) run on the host via `npm run dev`; only stateful services live here.
+name: btv360
+
+services:
+  postgres:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_USER: btv
+      POSTGRES_PASSWORD: btv_local_password
+      POSTGRES_DB: btv
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U btv -d btv']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7.4.1-alpine
+    # BullMQ requires keys to never be evicted.
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: btvminio
+      MINIO_ROOT_PASSWORD: btv_minio_local_secret
+      # Server-wide CORS allowlist (MinIO applies CORS globally rather than per bucket).
+      MINIO_API_CORS_ALLOW_ORIGIN: '${MINIO_CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}'
+    ports:
+      - '${MINIO_PORT:-9000}:9000'
+      - '${MINIO_CONSOLE_PORT:-9001}:9001'
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # One-shot job: creates the private bucket and applies CORS rules, then exits.
+  minio-init:
+    image: minio/mc:RELEASE.2024-11-21T17-21-54Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./docker/minio-cors.json:/config/cors.json:ro
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        set -e
+        mc alias set local http://minio:9000 btvminio btv_minio_local_secret
+        mc mb --ignore-existing local/btv-media
+        mc anonymous set none local/btv-media
+        # Bucket-level CORS is only supported on newer MinIO builds; the server-wide
+        # MINIO_API_CORS_ALLOW_ORIGIN setting above covers older ones.
+        mc cors set local/btv-media /config/cors.json 2>/dev/null || echo "bucket CORS not supported; using server-wide CORS"
+        echo "bucket btv-media ready"
+    restart: 'no'
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

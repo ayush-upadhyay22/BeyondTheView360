@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, typecheck, unit tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  integration:
+    name: Integration tests (Postgres, Redis, MinIO)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.6-alpine
+        env:
+          POSTGRES_USER: btv
+          POSTGRES_PASSWORD: btv_local_password
+          POSTGRES_DB: btv
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U btv -d btv" --health-interval 2s --health-timeout 3s
+          --health-retries 30
+      redis:
+        image: redis:7.4.1-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      # GitHub service containers cannot pass a command, so MinIO is started manually.
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=btvminio -e MINIO_ROOT_PASSWORD=btv_minio_local_secret \
+            minio/minio:RELEASE.2024-12-18T13-15-44Z server /data
+          for i in $(seq 1 30); do curl -sf http://localhost:9000/minio/health/ready && break; sleep 1; done
+          docker run --rm --network host --entrypoint /bin/sh minio/mc:RELEASE.2024-11-21T17-21-54Z -c \
+            "mc alias set local http://localhost:9000 btvminio btv_minio_local_secret && mc mb --ignore-existing local/btv-media"
+      - run: npm ci
+      - run: npm run db:migrate
+      - run: npm run test:integration
+        env:
+          RUN_INTEGRATION: '1'

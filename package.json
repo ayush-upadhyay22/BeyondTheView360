@@ -1,3 +1,50 @@
-{"name":"tour360","version":"1.0.0","type":"module","private":true,
- "scripts":{"start":"node server.js"},
- "dependencies":{"better-sqlite3":"^11.0.0","express":"^4.19.2","sharp":"^0.33.4"}}
+{
+  "name": "beyondtheview360",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Upload 360° photos, link them into virtual tours and share them anywhere.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=20.12.0"
+  },
+  "workspaces": [
+    "packages/shared",
+    "packages/core",
+    "apps/worker",
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n api,worker,web -c blue,magenta,green \"npm:dev -w @btv/api\" \"npm:dev -w @btv/worker\" \"npm:dev -w @btv/web\"",
+    "docker:up": "docker compose up -d --wait postgres redis minio && docker compose run --rm minio-init",
+    "docker:down": "docker compose down",
+    "docker:reset": "docker compose down -v",
+    "db:generate": "npm run db:generate -w @btv/core",
+    "db:migrate": "npm run db:migrate -w @btv/core",
+    "db:seed": "npm run db:seed -w @btv/api",
+    "samples:generate": "npm run samples:generate -w @btv/worker",
+    "samples:upload": "npm run samples:upload -w @btv/api",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:integration": "npm run test:integration --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@types/node": "20.19.43",
+    "concurrently": "9.2.5",
+    "eslint": "9.39.5",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-react-hooks": "5.2.0",
+    "globals": "17.13.0",
+    "prettier": "3.9.10",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "2.1.9"
+  }
+}
