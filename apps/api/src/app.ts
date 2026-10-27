@@ -8,6 +8,9 @@ import { CSRF_HEADER } from '@btv/shared';
 import { errorBody, errorHandler } from './errors.js';
 import { ah, csrfProtection, sessionMiddleware } from './middleware.js';
 import { authRouter } from './routes/auth.js';
+import { hotspotsRouter } from './routes/hotspots.js';
+import { scenesRouter } from './routes/scenes.js';
+import { toursRouter } from './routes/tours.js';
 import type { AppDeps } from './deps.js';
 
 export type { AppDeps } from './deps.js';
@@ -89,6 +92,9 @@ export function createApp(deps: AppDeps): Express {
   api.use(csrfProtection(config));
 
   api.use('/auth', authRouter(deps));
+  api.use('/tours', toursRouter(deps));
+  api.use('/scenes', scenesRouter(deps));
+  api.use('/hotspots', hotspotsRouter(deps));
 
   api.use((_req, res) => {
     res.status(404).json(errorBody('not_found', 'Endpoint not found.'));

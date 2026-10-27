@@ -1,7 +1,14 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sql } from 'drizzle-orm';
-import { createDb, createLogger, loadEnvFiles } from '@btv/core';
+import {
+  createDb,
+  createLogger,
+  createSceneQueue,
+  createStorage,
+  loadEnvFiles,
+  storageKeys,
+} from '@btv/core';
 import { createApp, createRateLimiters, loadApiConfig } from './app.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -15,14 +22,23 @@ const logger = createLogger({
 });
 
 const dbHandle = createDb(config.DATABASE_URL);
+const storage = createStorage(config);
+const queue = createSceneQueue(config.REDIS_URL, {
+  attempts: config.JOB_ATTEMPTS,
+  backoffMs: config.JOB_BACKOFF_MS,
+});
 
 const app = createApp({
   config,
   db: dbHandle.db,
   logger,
+  storage,
+  queue,
   limiters: createRateLimiters(config),
   checks: {
     database: () => dbHandle.db.execute(sql`select 1`),
+    redis: () => queue.ping(),
+    storage: () => storage.head(storageKeys.original('00000000-0000-0000-0000-000000000000')),
   },
 });
 
@@ -38,7 +54,7 @@ async function shutdown(signal: string) {
   const force = setTimeout(() => process.exit(1), 10_000);
   force.unref();
   server.close(async () => {
-    await dbHandle.close().catch(() => undefined);
+    await Promise.allSettled([dbHandle.close(), queue.close()]);
     process.exit(0);
   });
 }

@@ -1,4 +1,4 @@
-import type { Database, Logger } from '@btv/core';
+import type { Database, Logger, SceneQueue, StorageDriver } from '@btv/core';
 import type { ApiConfig } from './config.js';
 import type { RateLimiters } from './middleware.js';
 
@@ -7,6 +7,8 @@ export interface AppDeps {
   config: ApiConfig;
   db: Database;
   logger: Logger;
+  storage: StorageDriver;
+  queue: SceneQueue;
   limiters: RateLimiters;
   /** Readiness probes for external services. */
   checks: Record<string, () => Promise<unknown>>;

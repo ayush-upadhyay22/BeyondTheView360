@@ -4,3 +4,5 @@ coverage
 package-lock.json
 packages/core/drizzle
 samples
+.local-infra
+dist-server
