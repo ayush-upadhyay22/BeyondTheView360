@@ -278,3 +278,15 @@ start scene.
 **D51. Out-of-scope features are marked in code.** Payments, custom domains, floor plans, AI
 enhancement, mobile app and extra storage drivers each have an `EXTENSION POINT` comment where
 they would plug in; the README roadmap lists them.
+
+## Phase 9 — Final check
+
+**D52. Fresh-clone verification.** The documented path (clone → `npm install` → infra →
+`db:migrate && db:seed` → `samples:generate` → `dev` → `samples:upload`) was run from a clean
+clone against an empty database: 3 sample scenes became ready, the invalid one was rejected with
+its message, and `/t/demo-tour-360` rendered the linked tour. Lint, format check, typecheck, unit
+tests, integration tests and the production build all passed from the same clone. Docker was not
+available on the verification machine, so Postgres 16, Redis 7 and MinIO ran natively with the
+same ports, credentials and CORS settings as `docker-compose.yml`. npm 11 may print an
+"install-scripts" notice for sharp/esbuild; both work from their prebuilt platform packages, so
+no action is needed.
