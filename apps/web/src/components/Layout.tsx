@@ -3,11 +3,21 @@ import { Link, useNavigate } from 'react-router-dom';
 import { BRAND } from '../config';
 import { useLogout, useMe } from '../lib/auth';
 
-export function Logo({ className = '' }: { className?: string }) {
+export function Logo({
+  className = '',
+  compact = false,
+}: {
+  className?: string;
+  compact?: boolean;
+}) {
   return (
-    <Link to="/" className={`flex items-center gap-2 font-semibold tracking-tight ${className}`}>
+    <Link
+      to="/"
+      className={`flex shrink-0 items-center gap-2 font-semibold tracking-tight ${className}`}
+      aria-label={compact ? BRAND.name : undefined}
+    >
       <img src="/favicon.svg" alt="" width={28} height={28} />
-      <span>{BRAND.name}</span>
+      {!compact && <span>{BRAND.name}</span>}
     </Link>
   );
 }

@@ -201,3 +201,35 @@ The Vite dev server mirrors the framing rules.
 **D38. Web unit tests use their own Vitest config.** The root Vitest (2.x) ships Vite 5 while the
 app builds with Vite 6; `vitest.config.ts` avoids loading the app's Vite plugins, and
 `vite.config.ts` is left out of the app `tsc` project to avoid the duplicate-type clash.
+
+## Phase 6 — Editor and dashboard
+
+**D39. Server state lives in TanStack Query; edits are optimistic.** Every editor mutation goes
+through one helper (`useTourMutation`) that patches the cached `TourDTO` immediately, rolls back
+on error and refetches afterwards, so the UI never waits for the network and always converges on
+server truth. All edits share a mutation key, which drives the "Saving… / All changes saved /
+Not saved: …" indicator.
+
+**D40. Autosave instead of save buttons.** Text fields save 600 ms after the user stops typing and
+flush on unmount (switching hotspot or leaving the page never drops an edit). Invalid drafts (empty
+required title, non-http image URL) are shown inline and simply not sent.
+
+**D41. Upload queue in the browser.** Files are pre-checked (type, size, remaining scene quota),
+then uploaded three at a time straight to storage with `XMLHttpRequest` (fetch has no upload
+progress). Presign calls are serialised so scene order matches the order files were dropped; the
+storage POSTs run in parallel. Uploads can be cancelled, and leaving the page mid-upload warns.
+Processing progress then comes from polling the tour every 1.5 s while any scene is busy.
+
+**D42. Hotspot placement and editing.** "Add link"/"Add info" arm a placement mode; the next click
+in the panorama (not a drag) creates the hotspot at that yaw/pitch and opens it in the inspector.
+Markers are dragged to move (optimistic PATCH on drop); clicking a marker in the editor selects
+instead of navigating. "Scene starts here", "North is here" and "Tour starts here" capture the
+live camera view, so authors set orientation by looking rather than typing angles.
+
+**D43. Reordering.** Native HTML drag-and-drop on the scene list plus explicit up/down buttons for
+keyboard and touch users; both send the full ordered id list (`PUT /tours/:id/scenes/order`).
+
+**D44. Share snippet.** The iframe snippet uses the `/embed/:shareId` route with `allow="fullscreen;
+gyroscope; accelerometer; xr-spatial-tracking"` so VR/gyro work when embedded; the title is
+attribute-escaped (unit-tested). Private tours show a warning that the links only work for the
+owner.
