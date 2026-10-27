@@ -69,6 +69,8 @@ export interface TourSummaryDTO {
   updatedAt: string;
 }
 
+// EXTENSION POINT (floor plans): add `floorPlan?: { imageUrl; markers: { sceneId; x; y }[] }`
+// here and to PublicTourDTO; the viewer would render it as an overlay that calls goTo().
 export interface TourDTO extends TourSummaryDTO {
   description: string;
   startSceneId: string | null;

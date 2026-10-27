@@ -16,6 +16,8 @@ import { parse } from '../validate.js';
 export function publicRouter({ db, storage, limiters }: AppDeps) {
   const router = Router();
 
+  // EXTENSION POINT (custom domains): resolve the tour from the request Host header via a
+  // `custom_domains` table before falling back to the share id.
   async function loadVisibleTour(shareId: string, viewerId: string | undefined) {
     const [tour] = await db.select().from(tours).where(eq(tours.shareId, shareId)).limit(1);
     if (!tour || !canViewTour(tour, viewerId)) throw notFound('Tour');

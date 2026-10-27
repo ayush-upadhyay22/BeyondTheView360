@@ -1,0 +1,10 @@
+/** Demo account used by `db:seed` and `samples:upload`. Local development only. */
+export const DEMO = {
+  email: process.env.DEMO_EMAIL ?? 'demo@example.com',
+  password: process.env.DEMO_PASSWORD ?? 'beyond-the-view-demo',
+  tourTitle: 'Demo tour',
+  tourDescription:
+    'Synthetic sample scenes generated on your machine. Swap in your own 2:1 photos.',
+  /** Fixed share id so the demo is always at /t/demo-tour-360. */
+  shareId: 'demo-tour-360',
+} as const;

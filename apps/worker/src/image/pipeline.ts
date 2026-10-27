@@ -29,6 +29,9 @@ const SHARP_FORMATS: Record<string, string> = {
  * Validates an uploaded original and renders everything the viewer needs.
  * Output never carries metadata: sharp drops EXIF/GPS/XMP unless `withMetadata` is used,
  * and `.rotate()` bakes the EXIF orientation into the pixels first.
+ *
+ * EXTENSION POINT (AI enhancement): an optional enhance/denoise/auto-level step would run on the
+ * validated, oriented image before variants are rendered, as its own retryable job stage.
  */
 export async function processPanorama(
   original: Buffer,

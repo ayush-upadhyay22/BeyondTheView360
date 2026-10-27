@@ -254,3 +254,27 @@ viewer controls and a small link back to the public page. It is the only route s
 permissive `frame-ancestors` (see D37); every other page sends `frame-ancestors 'self'` and
 `X-Frame-Options: SAMEORIGIN`. Session cookies are `SameSite=Lax`, so inside third-party iframes
 the viewer is always anonymous — private tours therefore cannot be embedded, which is intended.
+
+## Phase 8 — Samples, seed, docs
+
+**D48. Synthetic samples rendered locally.** `samples:generate` draws original equirectangular
+scenes (courtyard, gallery, rooftop) as SVG and rasterises them with sharp, so no images are
+downloaded or copied and the command works offline. One sample per format (JPEG, PNG, WebP)
+exercises every decoder; a 4:1 `invalid-wide-strip.jpg` exercises the rejection path. Compass
+labels put north at yaw 0 so orientation bugs are visible. Output goes to the git-ignored
+`samples/` folder.
+
+**D49. Seed is idempotent and refuses production.** `db:seed` upserts `demo@example.com`
+(password documented in the README, overridable via `DEMO_PASSWORD`) and an unlisted demo tour
+with the fixed share id `demo-tour-360`, so the demo URL is stable across resets. It exits in
+`NODE_ENV=production` unless `ALLOW_SEED=1`.
+
+**D50. `samples:upload` uses the real public API.** It logs in, presigns, POSTs each file to
+storage, calls `/complete` and polls exactly like the browser, so it doubles as an end-to-end
+smoke test. Already-uploaded scene names are skipped (safe to rerun). Ready scenes are linked in a
+ring (forward at yaw 0, back at yaw 180) with one info hotspot each, and the first becomes the
+start scene.
+
+**D51. Out-of-scope features are marked in code.** Payments, custom domains, floor plans, AI
+enhancement, mobile app and extra storage drivers each have an `EXTENSION POINT` comment where
+they would plug in; the README roadmap lists them.

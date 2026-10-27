@@ -22,7 +22,11 @@ export function ah(
   };
 }
 
-/** Attaches `req.user` when a valid session cookie is present. Never rejects by itself. */
+/**
+ * Attaches `req.user` when a valid session cookie is present. Never rejects by itself.
+ * EXTENSION POINT (mobile app): also accept `Authorization: Bearer <token>` backed by the same
+ * hashed `sessions` table; bearer requests are not subject to cookie CSRF.
+ */
 export function sessionMiddleware(db: Database): RequestHandler {
   return ah(async (req, _res, next) => {
     const token: unknown = req.cookies?.[SESSION_COOKIE];
