@@ -233,3 +233,24 @@ keyboard and touch users; both send the full ordered id list (`PUT /tours/:id/sc
 gyroscope; accelerometer; xr-spatial-tracking"` so VR/gyro work when embedded; the title is
 attribute-escaped (unit-tested). Private tours show a warning that the links only work for the
 owner.
+
+## Phase 7 — Public page, embed, analytics
+
+**D45. One public endpoint for page and embed.** `GET /api/public/tours/:shareId` returns a
+`PublicTourDTO` with only ready scenes and only links between ready scenes; no owner ids, emails
+or storage keys. Share ids are random 10-char ids (not the tour UUID) validated by regex. Private
+tours return 404 for everyone except their owner (who sees a banner), matching the
+"404 instead of 403" rule. Responses are `Cache-Control: private, no-store` because they contain
+signed URLs; the client refreshes them every 10 minutes, well inside the URL TTL.
+
+**D46. Privacy-friendly view counting.** `POST /api/public/tours/:shareId/views` increments
+`tours.view_count` and an aggregate `tour_views_daily` row in one transaction. No cookies, IPs,
+user agents or visitor ids are stored; the browser dedupes with `sessionStorage` (one view per tab
+session) and the endpoint is rate-limited per IP in memory only. Owners' own views are not
+counted. The editor shows total and a 30-day bar chart.
+
+**D47. Embedding.** `/embed/:shareId` is a chrome-less page (no site header/footer) with the full
+viewer controls and a small link back to the public page. It is the only route served with a
+permissive `frame-ancestors` (see D37); every other page sends `frame-ancestors 'self'` and
+`X-Frame-Options: SAMEORIGIN`. Session cookies are `SameSite=Lax`, so inside third-party iframes
+the viewer is always anonymous — private tours therefore cannot be embedded, which is intended.

@@ -36,6 +36,7 @@ import { TourPlayer, type TourPlayerHandle } from '../viewer/TourPlayer';
 import { Uploader } from '../editor/Uploader';
 import { SceneList } from '../editor/SceneList';
 import { HotspotPanel, TourSettings } from '../editor/Inspector';
+import { ViewStats } from '../editor/ViewStats';
 import { VisibilityBadge } from './Dashboard';
 
 type AddMode = 'link' | 'info' | null;
@@ -509,6 +510,7 @@ export default function TourEditor() {
             readyScenes={ready}
             onChange={(input) => updateTour.mutate(input)}
           />
+          <ViewStats tourId={tourId} />
         </aside>
       </div>
 

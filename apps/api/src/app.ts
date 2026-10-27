@@ -9,6 +9,7 @@ import { errorBody, errorHandler } from './errors.js';
 import { ah, csrfProtection, sessionMiddleware } from './middleware.js';
 import { authRouter } from './routes/auth.js';
 import { hotspotsRouter } from './routes/hotspots.js';
+import { publicRouter } from './routes/public.js';
 import { scenesRouter } from './routes/scenes.js';
 import { toursRouter } from './routes/tours.js';
 import type { AppDeps } from './deps.js';
@@ -95,6 +96,7 @@ export function createApp(deps: AppDeps): Express {
   api.use('/tours', toursRouter(deps));
   api.use('/scenes', scenesRouter(deps));
   api.use('/hotspots', hotspotsRouter(deps));
+  api.use('/public', publicRouter(deps));
 
   api.use((_req, res) => {
     res.status(404).json(errorBody('not_found', 'Endpoint not found.'));

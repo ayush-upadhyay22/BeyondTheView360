@@ -11,6 +11,8 @@ const Login = lazy(() => import('./pages/Auth').then((m) => ({ default: m.Login 
 const Signup = lazy(() => import('./pages/Auth').then((m) => ({ default: m.Signup })));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const TourEditor = lazy(() => import('./pages/TourEditor'));
+const PublicTour = lazy(() => import('./pages/PublicTour'));
+const EmbedTour = lazy(() => import('./pages/EmbedTour'));
 
 export function App() {
   return (
@@ -36,6 +38,8 @@ export function App() {
             </RequireAuth>
           }
         />
+        <Route path="/t/:shareId" element={<PublicTour />} />
+        <Route path="/embed/:shareId" element={<EmbedTour />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Suspense>
