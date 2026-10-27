@@ -23,3 +23,6 @@ npm-debug.log*
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# local, non-docker infra used for manual verification
+.local-infra/

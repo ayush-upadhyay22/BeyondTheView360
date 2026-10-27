@@ -42,3 +42,36 @@ also attempts `mc cors set` with `docker/minio-cors.json` (the same JSON works f
 **D8. CI.** Two jobs: (1) lint, prettier check, typecheck, unit tests and build; (2) integration
 tests against real Postgres/Redis/MinIO containers. MinIO is started with `docker run` because
 GitHub service containers cannot override the image command.
+
+## Phase 2 — Database & auth
+
+**D9. Drizzle ORM + drizzle-kit.** Schema lives in `packages/core/src/db/schema.ts`; SQL
+migrations are generated with `npm run db:generate` and committed under `packages/core/drizzle`.
+`npm run db:migrate` applies them with Drizzle's migrator (no drizzle-kit needed at runtime).
+`drizzle-orm` is also a root devDependency so npm hoists it next to `drizzle-kit` (otherwise npm
+nests it because of its long optional peer list and drizzle-kit cannot find it).
+
+**D10. Server-side sessions instead of JWT.** A random 256-bit token is stored in an `httpOnly`,
+`SameSite=Lax`, `Secure` (in production) cookie; only its SHA-256 hash is stored in the `sessions`
+table. This makes logout/revocation immediate, needs no signing secret, and a leaked database does
+not leak usable tokens. Sessions are rotated on login (prevents fixation) and expire after
+`SESSION_TTL_DAYS`.
+
+**D11. CSRF.** Defence in depth: `SameSite=Lax` cookies, plus every non-GET request must carry
+the custom header `x-btv-csrf: 1` (cross-site forms cannot set it; cross-origin `fetch` would
+need a CORS preflight that only allowlisted origins pass), plus an `Origin` allowlist check.
+
+**D12. Passwords.** argon2id via `@node-rs/argon2` (prebuilt N-API binaries, no node-gyp) with
+OWASP minimum parameters. Logins for unknown emails still run a dummy verification so timing does
+not reveal which accounts exist. Minimum password length is 10.
+
+**D13. Ownership failures return 404.** Accessing another user's tour/scene/hotspot returns
+"not found" rather than 403 so ids of other users' content cannot be probed.
+
+**D14. Emails** are trimmed and lower-cased before storage and lookup (unique index on the
+normalised value).
+
+**D15. Rate limiting** uses `express-rate-limit` with its in-memory store: auth 30 / 15 min / IP,
+uploads 200 / 15 min / user, public view pings 60 / min / IP, everything else 600 / min / IP.
+With several API replicas, swap in a Redis store (`rate-limit-redis`) — marked as an extension
+point in `apps/api/src/middleware.ts`.
