@@ -110,3 +110,48 @@ hint; too-large files use 413 (`file_too_large`).
 **D22. Best-effort object deletion.** Deleting a scene/tour removes DB rows first (cascades take
 care of hotspots and links), then deletes objects asynchronously; failures are logged and never
 block the user. Orphans are harmless because keys are never reused.
+
+**D23. Single-object deletes.** Batch `DeleteObjects` requires `Content-MD5` on some
+S3-compatible stores (including the pinned MinIO release), which recent AWS SDKs no longer send.
+The S3 driver therefore issues `DeleteObject` calls with bounded concurrency (8). Scenes have
+fewer than ten objects, so the cost is negligible.
+
+## Phase 4 — Queue, worker & image pipeline
+
+**D24. Idempotent jobs.** The BullMQ job id is `scene-<sceneId>`, so double enqueues are ignored.
+The processor skips scenes that are already `ready`, deleted, or not yet uploaded; object writes
+are overwrites of deterministic keys. Producers remove a _finished_ job with the same id before
+re-adding it so retries work.
+
+**D25. Permanent vs transient failures.** Validation problems throw `PermanentError`; the
+processor marks the scene `failed` with the (user-friendly) message and rethrows BullMQ's
+`UnrecoverableError`, so the job fails at once with no retries. Other errors are retried
+(`JOB_ATTEMPTS`, exponential backoff from `JOB_BACKOFF_MS`); between attempts the scene shows
+`queued`, and after the last attempt it becomes `failed` with a generic "try again" message.
+libvips decode errors (truncated/corrupt files) count as permanent; out-of-memory does not.
+
+**D26. Dead letters.** Failed jobs are kept in BullMQ's failed set for 30 days _and_ a summary is
+copied to the `scene-processing-dead-letter` queue and logged at `error` level, so they can be
+inspected (e.g. with Bull Board / redis-cli) or replayed.
+
+**D27. Stuck-job recovery.** Two layers: BullMQ stalled-job detection (a crashed worker's job is
+re-queued after 30 s, up to 2 times), plus a sweeper in every worker (startup + every
+`SWEEP_INTERVAL_SECONDS`) that re-enqueues scenes left in `queued`/`processing` for longer than
+`STUCK_SCENE_MINUTES` without a live job, and deletes `pending` uploads that never completed
+after `PENDING_UPLOAD_TTL_HOURS`. Multiple workers sweeping concurrently is safe thanks to D24.
+
+**D28. Image pipeline.** Magic bytes are checked first (JPEG/PNG/WebP only; the declared
+`Content-Type` is not trusted), then sharp metadata must agree with the detected format. EXIF
+orientation is applied before validation and baked into pixels. Variants are produced from the
+original for each width ≤ original (resized to exactly 2:1), as WebP; plus a 320×160 mozjpeg
+thumbnail and a 48×24 blurred WebP placeholder (stored in S3 and inlined in the DB as a data URL
+for instant display). sharp drops all metadata (EXIF, GPS, XMP) by default; a unit test asserts
+it. `limitInputPixels` guards against decompression bombs. `sharp.concurrency` is divided by the
+job concurrency to avoid oversubscribing CPUs.
+
+**D29. Queue prefix.** `QUEUE_PREFIX` namespaces BullMQ keys so several environments (or test
+runs) can share one Redis without stealing each other's jobs.
+
+**D30. Production bundles.** `tsup` bundles each server app with the workspace packages inlined
+and every npm dependency (including those of `@btv/core`) left external, giving a single
+`dist/server.js` / `dist/main.js` that runs with `node` against `node_modules`.

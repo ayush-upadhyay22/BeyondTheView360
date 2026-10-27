@@ -1,5 +1,5 @@
 import {
-  DeleteObjectsCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -122,16 +122,21 @@ export class S3StorageDriver implements StorageDriver {
     }
   }
 
+  /**
+   * Single-object deletes with bounded concurrency. Batch DeleteObjects needs a Content-MD5
+   * header on some S3-compatible stores (incl. older MinIO) that recent AWS SDKs no longer send.
+   * DELETE on a missing key succeeds, so this is naturally idempotent.
+   */
   async delete(keys: string | readonly string[]): Promise<void> {
     const list = (typeof keys === 'string' ? [keys] : [...keys]).map(assertSafeKey);
-    for (let i = 0; i < list.length; i += 1000) {
-      const chunk = list.slice(i, i + 1000);
-      if (!chunk.length) continue;
-      await this.client.send(
-        new DeleteObjectsCommand({
-          Bucket: this.config.bucket,
-          Delete: { Objects: chunk.map((Key) => ({ Key })), Quiet: true },
-        }),
+    const concurrency = 8;
+    for (let i = 0; i < list.length; i += concurrency) {
+      await Promise.all(
+        list
+          .slice(i, i + concurrency)
+          .map((Key) =>
+            this.client.send(new DeleteObjectCommand({ Bucket: this.config.bucket, Key })),
+          ),
       );
     }
   }

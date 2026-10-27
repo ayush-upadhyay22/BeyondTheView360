@@ -36,6 +36,7 @@ export function createRedisConnection(url: string, role: 'worker' | 'producer'):
 export interface QueueOptions {
   attempts: number;
   backoffMs: number;
+  prefix: string;
 }
 
 export function sceneJobOptions(opts: QueueOptions): JobsOptions {
@@ -59,6 +60,7 @@ export function createSceneQueue(redisUrl: string, opts: QueueOptions): SceneQue
   const connection = createRedisConnection(redisUrl, 'producer');
   const queue = new Queue<ProcessSceneJobData>(SCENE_QUEUE, {
     connection,
+    prefix: opts.prefix,
     defaultJobOptions: sceneJobOptions(opts),
   });
   return {

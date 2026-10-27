@@ -66,6 +66,11 @@ export const storageEnvSchema = z.object({
 export const queueEnvSchema = z.object({
   JOB_ATTEMPTS: envInt(3, 1, 20),
   JOB_BACKOFF_MS: envInt(5000, 100, 10 * 60_000),
+  /** Redis key prefix for BullMQ; lets several environments share one Redis. */
+  QUEUE_PREFIX: z
+    .string()
+    .regex(/^[a-z0-9_-]{1,40}$/i)
+    .default('btv'),
 });
 
 /** Parses env with a zod schema and throws one readable error listing every problem. */

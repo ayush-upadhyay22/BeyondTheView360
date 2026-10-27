@@ -26,6 +26,7 @@ const storage = createStorage(config);
 const queue = createSceneQueue(config.REDIS_URL, {
   attempts: config.JOB_ATTEMPTS,
   backoffMs: config.JOB_BACKOFF_MS,
+  prefix: config.QUEUE_PREFIX,
 });
 
 const app = createApp({
