@@ -1,5 +1,5 @@
 import { ALLOWED_UPLOAD_TYPES, type PresignUploadResponse, type SceneDTO } from '@btv/shared';
-import { ApiError, post } from './api';
+import { ApiError, del, post } from './api';
 
 export type AllowedType = (typeof ALLOWED_UPLOAD_TYPES)[number];
 
@@ -23,9 +23,9 @@ export function precheckFile(file: File, maxBytes: number): string | null {
   return null;
 }
 
-function postToStorage(
+export function postToStorage(
   upload: PresignUploadResponse['upload'],
-  file: File,
+  file: Blob,
   onProgress: (fraction: number) => void,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -73,7 +73,14 @@ export async function uploadPanorama(
   presigned?: Promise<PresignUploadResponse>,
 ): Promise<SceneDTO> {
   const { scene, upload } = await (presigned ?? presignUpload(tourId, file));
-  await postToStorage(upload, file, onProgress, signal);
+  try {
+    await postToStorage(upload, file, onProgress, signal);
+  } catch (err) {
+    // The scene was already reserved and linked into the walk-through: remove it and reconnect
+    // its neighbours so a cancelled upload doesn't leave a gap.
+    await del(`/scenes/${scene.id}?relink=1`).catch(() => undefined);
+    throw err;
+  }
   try {
     return (await post<{ scene: SceneDTO }>(`/scenes/${scene.id}/complete`)).scene;
   } catch (err) {

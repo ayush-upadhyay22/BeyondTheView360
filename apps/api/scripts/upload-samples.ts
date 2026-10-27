@@ -1,7 +1,8 @@
 /**
  * Uploads every image in ./samples to the demo tour through the real public API — exactly the
  * flow the browser uses: login → presign → POST to storage → complete → poll until processed.
- * Afterwards the ready scenes are linked in a loop and the first one becomes the start scene.
+ * Each presign auto-links the new room to the previous one (next/back arrows). The first
+ * ready scene becomes the tour start. Already-uploaded scene names are skipped.
  *
  *   npm run samples:upload            (API must be running: npm run dev)
  *   API_URL=https://… npm run samples:upload
@@ -141,41 +142,21 @@ async function main() {
     }
   }
 
-  // Link ready scenes in a simple loop (A → B → C → A) when they have no links yet.
   const { tour } = await api<{ tour: TourDTO }>('GET', `/tours/${summary.id}`);
   const ready = tour.scenes
     .filter((s) => s.status === 'ready')
     .sort((a, b) => a.position - b.position);
   if (ready.length > 1) {
-    for (const [i, scene] of ready.entries()) {
-      if (scene.hotspots.some((h) => h.type === 'link')) continue;
-      const next = ready[(i + 1) % ready.length]!;
-      await api('POST', `/scenes/${scene.id}/hotspots`, {
-        type: 'link',
-        yaw: 0,
-        pitch: -12,
-        targetSceneId: next.id,
-        title: `Go to ${next.name}`,
-      });
-      if (ready.length > 2) {
-        const prev = ready[(i - 1 + ready.length) % ready.length]!;
-        await api('POST', `/scenes/${scene.id}/hotspots`, {
-          type: 'link',
-          yaw: 180,
-          pitch: -12,
-          targetSceneId: prev.id,
-          title: `Back to ${prev.name}`,
-        });
-      }
-      await api('POST', `/scenes/${scene.id}/hotspots`, {
-        type: 'info',
-        yaw: 90,
-        pitch: 5,
-        title: `About ${scene.name}`,
-        text: 'A synthetic sample panorama. Replace it with your own 2:1 photos.',
-      });
-    }
-    console.info(`\nLinked ${ready.length} scenes.`);
+    const { result } = await api<{ result: { added: number; removed: number } }>(
+      'POST',
+      `/tours/${tour.id}/link-in-order`,
+      { mode: 'missing' },
+    );
+    console.info(
+      `\nWalk-through: ${ready.length} rooms in order${
+        result.added ? ` (${result.added} missing arrow${result.added === 1 ? '' : 's'} added)` : ''
+      }.`,
+    );
   }
   if (ready[0] && !tour.startSceneId) {
     await api('PATCH', `/tours/${tour.id}`, { startSceneId: ready[0].id });

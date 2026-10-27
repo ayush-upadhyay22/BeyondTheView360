@@ -1,6 +1,7 @@
 import {
   type AnyPgColumn,
   bigint,
+  check,
   date,
   index,
   integer,
@@ -14,7 +15,8 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { HOTSPOT_TYPES, SCENE_STATUSES, TOUR_VISIBILITIES, type View } from '@btv/shared';
+import { sql } from 'drizzle-orm';
+import { HOTSPOT_KINDS, SCENE_STATUSES, TOUR_VISIBILITIES, type View } from '@btv/shared';
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -26,7 +28,6 @@ const timestamps = {
 
 export const tourVisibility = pgEnum('tour_visibility', TOUR_VISIBILITIES);
 export const sceneStatus = pgEnum('scene_status', SCENE_STATUSES);
-export const hotspotType = pgEnum('hotspot_type', HOTSPOT_TYPES);
 
 export const users = pgTable(
   'users',
@@ -73,6 +74,10 @@ export const tours = pgTable(
     }),
     startView: jsonb('start_view').$type<View>(),
     viewCount: integer('view_count').notNull().default(0),
+    /** Optional floor plan (WebP in the bucket) with its pixel size, for the mini-map. */
+    floorPlanKey: text('floor_plan_key'),
+    floorPlanWidth: integer('floor_plan_width'),
+    floorPlanHeight: integer('floor_plan_height'),
     ...timestamps,
   },
   (t) => [uniqueIndex('tours_share_id_key').on(t.shareId), index('tours_owner_idx').on(t.ownerId)],
@@ -105,6 +110,9 @@ export const scenes = pgTable(
     startView: jsonb('start_view').$type<View>(),
     /** Yaw (degrees) that points north; used by the compass. */
     northOffset: real('north_offset').notNull().default(0),
+    /** Floor-plan pin as fractions (0..1) of the plan's width and height. */
+    mapX: real('map_x'),
+    mapY: real('map_y'),
     queuedAt: timestamp('queued_at', { withTimezone: true }),
     processedAt: timestamp('processed_at', { withTimezone: true }),
     ...timestamps,
@@ -122,17 +130,32 @@ export const hotspots = pgTable(
     sceneId: uuid('scene_id')
       .notNull()
       .references(() => scenes.id, { onDelete: 'cascade' }),
-    type: hotspotType('type').notNull(),
+    /**
+     * Column is named `type` for backwards compatibility (old rows are `link` or `info`). Plain
+     * text + CHECK rather than an enum, so it can carry a partial unique index.
+     */
+    kind: text('type', { enum: HOTSPOT_KINDS }).notNull(),
     yaw: real('yaw').notNull(),
     pitch: real('pitch').notNull(),
-    /** Link hotspots are removed together with the scene they point to. */
+    /** Navigation hotspots are removed together with the scene they point to. */
     targetSceneId: uuid('target_scene_id').references(() => scenes.id, { onDelete: 'cascade' }),
     title: text('title').notNull().default(''),
     text: text('text').notNull().default(''),
     imageUrl: text('image_url'),
     ...timestamps,
   },
-  (t) => [index('hotspots_scene_idx').on(t.sceneId)],
+  (t) => [
+    index('hotspots_scene_idx').on(t.sceneId),
+    index('hotspots_target_idx').on(t.targetSceneId),
+    // At most one next/back arrow per (scene, target): makes auto-linking idempotent.
+    uniqueIndex('hotspots_chain_key')
+      .on(t.sceneId, t.kind, t.targetSceneId)
+      .where(sql`${t.kind} in ('next', 'back')`),
+    check(
+      'hotspots_kind_check',
+      sql`${t.kind} in (${sql.raw(HOTSPOT_KINDS.map((k) => `'${k}'`).join(', '))})`,
+    ),
+  ],
 );
 
 /** Privacy-friendly analytics: one aggregated counter per tour per day, no personal data. */

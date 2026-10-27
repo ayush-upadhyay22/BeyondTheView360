@@ -10,6 +10,9 @@ import {
 import { Spinner } from '../components/feedback';
 import { AutoField } from './AutoField';
 
+/** Drag payload for dropping a scene onto the viewer to create a link hotspot. */
+export const SCENE_DRAG_TYPE = 'application/x-btv-scene';
+
 const STATUS_LABEL: Record<SceneDTO['status'], string> = {
   pending: 'Uploading',
   queued: 'Queued',
@@ -92,8 +95,10 @@ export function SceneList({
           draggable={renaming !== s.id}
           onDragStart={(e) => {
             setDragId(s.id);
-            e.dataTransfer.effectAllowed = 'move';
+            // Reorder within the list, or drop onto the viewer to link to this room.
+            e.dataTransfer.effectAllowed = 'all';
             e.dataTransfer.setData('text/plain', s.id);
+            if (s.status === 'ready') e.dataTransfer.setData(SCENE_DRAG_TYPE, s.id);
           }}
           onDragOver={(e) => {
             if (!dragId) return;

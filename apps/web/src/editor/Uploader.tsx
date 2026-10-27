@@ -6,7 +6,8 @@ import { errorMessage } from '../lib/api';
 import { tourKey, toursKey } from '../lib/queries';
 import { formatBytes, precheckFile, presignUpload, uploadPanorama } from '../lib/upload';
 
-const PARALLEL_UPLOADS = 3;
+/** One at a time, in the order the files were chosen: each scene is linked after the previous. */
+const PARALLEL_UPLOADS = 1;
 
 interface UploadItem {
   key: string;
@@ -137,6 +138,9 @@ export function Uploader({
         </p>
         <p className="mt-1 text-xs text-slate-500">
           Equirectangular 2:1 · JPEG, PNG or WebP · up to {formatBytes(maxBytes)}
+        </p>
+        <p className="mt-1 text-xs text-slate-500">
+          Rooms are linked in the order you add them, e.g. 01-hall, 02-kitchen.
         </p>
         <input
           ref={inputRef}

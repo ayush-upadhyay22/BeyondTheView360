@@ -5,7 +5,13 @@ export const storageKeys = {
   variant: (sceneId: string, width: number) => `processed/${sceneId}/${width}.webp`,
   thumbnail: (sceneId: string) => `processed/${sceneId}/thumb.jpg`,
   placeholder: (sceneId: string) => `processed/${sceneId}/placeholder.webp`,
+  /** Under processed/ so the same CDN rule serves it; a new upload always gets a new key. */
+  floorPlan: (tourId: string, fileId: string) => `processed/plans/${tourId}/${fileId}.webp`,
 };
+
+export function isFloorPlanKeyOf(tourId: string, key: string): boolean {
+  return new RegExp(`^processed/plans/${tourId}/[A-Za-z0-9_-]{8,32}\\.webp$`).test(key);
+}
 
 /** Every object that may exist for a scene (used when deleting it). */
 export function allSceneKeys(scene: { id: string; variants: readonly number[] }): string[] {

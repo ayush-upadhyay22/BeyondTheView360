@@ -16,7 +16,17 @@ import { AppHeader, Logo } from '../components/Layout';
 import { Dialog } from '../components/Dialog';
 import { SharePanel } from '../components/SharePanel';
 import { ErrorState, FullPageSpinner, Spinner } from '../components/feedback';
-import { CompassIcon, CrosshairIcon, EyeIcon, InfoIcon, LinkIcon } from '../components/icons';
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  ChainIcon,
+  CompassIcon,
+  CrosshairIcon,
+  EyeIcon,
+  InfoIcon,
+  LinkIcon,
+  MapIcon,
+} from '../components/icons';
 import { ApiError, errorMessage } from '../lib/api';
 import { useMe } from '../lib/auth';
 import {
@@ -24,6 +34,7 @@ import {
   useCreateHotspot,
   useDeleteHotspot,
   useDeleteScene,
+  useLinkInOrder,
   useReorderScenes,
   useRetryScene,
   useTour,
@@ -37,9 +48,18 @@ import { Uploader } from '../editor/Uploader';
 import { SceneList } from '../editor/SceneList';
 import { HotspotPanel, TourSettings } from '../editor/Inspector';
 import { ViewStats } from '../editor/ViewStats';
+import { FloorPlanEditor } from '../editor/FloorPlanEditor';
+import { SCENE_DRAG_TYPE } from '../editor/SceneList';
 import { VisibilityBadge } from './Dashboard';
 
 type AddMode = 'link' | 'info' | null;
+
+function HotspotKindIcon({ kind }: { kind: HotspotDTO['kind'] }) {
+  if (kind === 'next') return <ArrowUpIcon size={14} className="text-brand-300" />;
+  if (kind === 'back') return <ArrowDownIcon size={14} className="text-brand-300" />;
+  if (kind === 'link') return <LinkIcon size={14} className="text-brand-300" />;
+  return <InfoIcon size={14} className="text-ember-300" />;
+}
 
 function SaveStatus({ tourId }: { tourId: string }) {
   const saving = useIsMutating({ mutationKey: ['tour-edit', tourId] }) > 0;
@@ -115,13 +135,20 @@ export default function TourEditor() {
   const createHotspot = useCreateHotspot(tourId);
   const updateHotspot = useUpdateHotspot(tourId);
   const deleteHotspot = useDeleteHotspot(tourId);
+  const linkInOrder = useLinkInOrder(tourId);
 
   const playerRef = useRef<TourPlayerHandle>(null);
   const [sceneId, setSceneId] = useState<string | null>(null);
   const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>(null);
   const [mode, setMode] = useState<AddMode>(null);
   const [sharing, setSharing] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [linkTargetId, setLinkTargetId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<SceneDTO | null>(null);
+  const [relinkOnDelete, setRelinkOnDelete] = useState(true);
+  const [reordered, setReordered] = useState(false);
+  const [dropActive, setDropActive] = useState(false);
 
   const tour = tourQuery.data;
   const scenes = useMemo(
@@ -139,7 +166,9 @@ export default function TourEditor() {
   const selectedHotspot = currentReady
     ? (current.hotspots.find((h) => h.id === selectedHotspotId) ?? null)
     : null;
-  const linkTarget = ready.find((s) => s.id !== current?.id);
+  const linkTarget =
+    ready.find((s) => s.id === linkTargetId && s.id !== current?.id) ??
+    ready.find((s) => s.id !== current?.id);
   const hotspotLimit = (current?.hotspots.length ?? 0) >= MAX_HOTSPOTS_PER_SCENE;
 
   useEffect(() => {
@@ -185,14 +214,14 @@ export default function TourEditor() {
       const select = { onSuccess: (h: HotspotDTO) => setSelectedHotspotId(h.id) };
       if (mode === 'link' && linkTarget) {
         createHotspot.mutate(
-          { sceneId: current.id, type: 'link', ...at, targetSceneId: linkTarget.id, title: '' },
+          { sceneId: current.id, kind: 'link', ...at, targetSceneId: linkTarget.id, title: '' },
           select,
         );
       } else if (mode === 'info') {
         createHotspot.mutate(
           {
             sceneId: current.id,
-            type: 'info',
+            kind: 'info',
             ...at,
             title: 'Point of interest',
             text: '',
@@ -200,8 +229,8 @@ export default function TourEditor() {
           },
           select,
         );
+        setMode(null);
       }
-      setMode(null);
     },
     [mode, current, currentReady, linkTarget, createHotspot],
   );
@@ -244,13 +273,60 @@ export default function TourEditor() {
   const limits = me.data?.limits;
   const remainingScenes = Math.max(0, (limits?.maxScenesPerTour ?? 0) - scenes.length);
 
-  function confirmDeleteScene(s: SceneDTO) {
-    if (!window.confirm(`Delete scene “${s.name}”? Hotspots linking to it are removed too.`)) {
-      return;
-    }
+  function deleteSceneNow() {
+    const s = deleting;
+    if (!s) return;
     if (s.id === current?.id) setSceneId(null);
     setSelectedHotspotId(null);
-    deleteScene.mutate(s.id);
+    deleteScene.mutate({ id: s.id, relink: relinkOnDelete });
+    setDeleting(null);
+  }
+
+  function runLinkInOrder(mode: 'missing' | 'rebuild') {
+    linkInOrder.mutate(
+      { mode },
+      {
+        onSuccess: ({ result }) => {
+          setReordered(false);
+          setToast(
+            result.added || result.removed
+              ? `Walk-through updated: ${result.added} arrow${result.added === 1 ? '' : 's'} added${
+                  result.removed ? `, ${result.removed} removed` : ''
+                }`
+              : 'All rooms are already linked in order',
+          );
+        },
+      },
+    );
+  }
+
+  function onDropScene(e: React.DragEvent) {
+    setDropActive(false);
+    const targetId = e.dataTransfer.getData(SCENE_DRAG_TYPE);
+    if (!targetId) return;
+    e.preventDefault();
+    if (!current || !currentReady) return;
+    if (targetId === current.id) {
+      setToast('Drop a different room to link to it');
+      return;
+    }
+    if (hotspotLimit) {
+      setToast(`This scene already has ${MAX_HOTSPOTS_PER_SCENE} hotspots`);
+      return;
+    }
+    const pos = playerRef.current?.unproject(e.clientX, e.clientY);
+    if (!pos) return;
+    createHotspot.mutate(
+      {
+        sceneId: current.id,
+        kind: 'link',
+        yaw: round(normalizeYaw(pos.yaw), 2),
+        pitch: round(clamp(pos.pitch, -90, 90), 2),
+        targetSceneId: targetId,
+        title: '',
+      },
+      { onSuccess: (h: HotspotDTO) => setSelectedHotspotId(h.id) },
+    );
   }
 
   function saveSceneStart() {
@@ -329,10 +405,71 @@ export default function TourEditor() {
             startSceneId={tour.startSceneId ?? ready[0]?.id ?? null}
             onSelect={selectScene}
             onRename={(id, name) => updateScene.mutate({ id, name })}
-            onReorder={(ids) => reorder.mutate(ids)}
-            onDelete={confirmDeleteScene}
+            onReorder={(ids) => {
+              reorder.mutate(ids);
+              setReordered(true);
+            }}
+            onDelete={(s) => {
+              setRelinkOnDelete(true);
+              setDeleting(s);
+            }}
             onRetry={(id) => retryScene.mutate(id)}
           />
+          {reordered && scenes.length > 1 && (
+            <div
+              className="rounded-xl border border-brand-400/40 bg-brand-500/10 p-3 text-xs text-slate-200"
+              role="status"
+            >
+              <p>The order changed. Rebuild the next/back arrows to match it?</p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  className="btn-primary px-3 py-1 text-xs"
+                  disabled={linkInOrder.isPending}
+                  onClick={() => runLinkInOrder('rebuild')}
+                >
+                  Re-link in order
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost px-2 py-1 text-xs"
+                  onClick={() => setReordered(false)}
+                >
+                  Keep arrows
+                </button>
+              </div>
+            </div>
+          )}
+          {scenes.length > 1 && (
+            <button
+              type="button"
+              className="btn-secondary w-full justify-center text-sm"
+              disabled={linkInOrder.isPending}
+              onClick={() => runLinkInOrder('missing')}
+              title="Adds any missing next/back arrows in list order. Your own links are kept."
+            >
+              <ChainIcon size={16} /> Link all scenes in order
+            </button>
+          )}
+          <section
+            aria-labelledby="walk-help"
+            className="space-y-1.5 rounded-xl bg-ink-800/60 p-3 text-xs leading-relaxed text-slate-400"
+          >
+            <h2 id="walk-help" className="font-semibold text-slate-200">
+              Building the walk-through
+            </h2>
+            <p>
+              Photos are linked in upload order: each room gets a{' '}
+              <ArrowUpIcon size={11} className="inline" /> next arrow to the following room and a{' '}
+              <ArrowDownIcon size={11} className="inline" /> back arrow. Name files 01-hall,
+              02-kitchen… so they upload in order.
+            </p>
+            <p>Drag an arrow in the viewer onto the doorway it leads through.</p>
+            <p>Drag a scene thumbnail from this list onto the view to add a link there.</p>
+            <p>
+              Use “Add link” to place links by clicking; click an existing hotspot to remove it.
+            </p>
+          </section>
         </aside>
 
         {/* Viewer */}
@@ -350,6 +487,25 @@ export default function TourEditor() {
             >
               <LinkIcon size={14} /> Add link
             </ToolButton>
+            {mode === 'link' && linkTarget && (
+              <label className="flex items-center gap-1.5 text-xs text-slate-300">
+                to
+                <select
+                  className="input w-auto py-1 text-xs"
+                  value={linkTarget.id}
+                  onChange={(e) => setLinkTargetId(e.target.value)}
+                  aria-label="Room the new link goes to"
+                >
+                  {ready
+                    .filter((s) => s.id !== current?.id)
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            )}
             <ToolButton
               active={mode === 'info'}
               disabled={!currentReady || hotspotLimit}
@@ -380,14 +536,30 @@ export default function TourEditor() {
             >
               Tour starts here
             </ToolButton>
+            <ToolButton onClick={() => setPlanOpen(true)} title="Floor plan and room pins">
+              <MapIcon size={14} /> Floor plan
+            </ToolButton>
             <span className="ml-auto text-xs text-slate-400" aria-live="polite">
-              {mode
-                ? 'Click in the panorama to place it · Esc to cancel'
-                : (toast ?? 'Drag to look around · click a hotspot to edit')}
+              {toast ??
+                (mode === 'link'
+                  ? 'Click to place a link · click a hotspot to remove it · Esc to finish'
+                  : mode === 'info'
+                    ? 'Click in the panorama to place it · Esc to cancel'
+                    : 'Drag to look around · drag arrows onto doors · click a hotspot to edit')}
             </span>
           </div>
 
-          <div className="relative min-h-[50vh] flex-1">
+          <div
+            className={`relative min-h-[50vh] flex-1 ${dropActive ? 'ring-4 ring-inset ring-brand-400' : ''}`}
+            onDragOver={(e) => {
+              if (!e.dataTransfer.types.includes(SCENE_DRAG_TYPE) || !currentReady) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'link';
+              setDropActive(true);
+            }}
+            onDragLeave={() => setDropActive(false)}
+            onDrop={onDropScene}
+          >
             <div className="absolute inset-0">
               <TourPlayer
                 ref={playerRef}
@@ -397,10 +569,17 @@ export default function TourEditor() {
                 onSceneChange={selectScene}
                 chrome="minimal"
                 autorotate={false}
+                floorPlan={tour.floorPlan}
                 editable
                 crosshair={!!mode}
                 selectedHotspotId={selectedHotspotId}
                 onHotspotSelect={(h) => {
+                  if (mode === 'link') {
+                    deleteHotspot.mutate(h.id);
+                    if (selectedHotspotId === h.id) setSelectedHotspotId(null);
+                    setToast('Hotspot removed');
+                    return;
+                  }
                   setSelectedHotspotId(h.id);
                   setMode(null);
                 }}
@@ -446,6 +625,11 @@ export default function TourEditor() {
               hotspot={selectedHotspot}
               scenes={ready}
               onChange={(input) => updateHotspot.mutate({ id: selectedHotspot.id, ...input })}
+              onWalk={() => {
+                const h = selectedHotspot;
+                setSelectedHotspotId(null);
+                if (h.targetSceneId) playerRef.current?.walkTo(h.targetSceneId, h.yaw);
+              }}
               onDelete={() => {
                 deleteHotspot.mutate(selectedHotspot.id);
                 setSelectedHotspotId(null);
@@ -488,11 +672,7 @@ export default function TourEditor() {
                             playerRef.current?.setView({ yaw: h.yaw, pitch: h.pitch });
                           }}
                         >
-                          {h.type === 'link' ? (
-                            <LinkIcon size={14} className="text-brand-300" />
-                          ) : (
-                            <InfoIcon size={14} className="text-ember-300" />
-                          )}
+                          <HotspotKindIcon kind={h.kind} />
                           <span className="truncate">
                             {h.title ||
                               `→ ${scenes.find((s) => s.id === h.targetSceneId)?.name ?? 'scene'}`}
@@ -513,6 +693,45 @@ export default function TourEditor() {
           <ViewStats tourId={tourId} />
         </aside>
       </div>
+
+      <Dialog
+        open={!!deleting}
+        onClose={() => setDeleting(null)}
+        title={`Delete “${deleting?.name ?? ''}”?`}
+      >
+        <div className="space-y-4 text-sm">
+          <p className="text-slate-300">
+            The photo and its hotspots are removed. Arrows and links in other rooms that lead to it
+            are removed too.
+          </p>
+          <label className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              className="mt-0.5 accent-brand-500"
+              checked={relinkOnDelete}
+              onChange={(e) => setRelinkOnDelete(e.target.checked)}
+            />
+            <span>
+              Reconnect the rooms before and after it
+              <span className="block text-xs text-slate-500">
+                Keeps the walk-through unbroken by joining its neighbours directly.
+              </span>
+            </span>
+          </label>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-ghost" onClick={() => setDeleting(null)}>
+              Cancel
+            </button>
+            <button type="button" className="btn-danger" onClick={deleteSceneNow}>
+              Delete scene
+            </button>
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog open={planOpen} onClose={() => setPlanOpen(false)} title="Floor plan" wide>
+        <FloorPlanEditor tour={tour} onDone={(msg) => setToast(msg)} />
+      </Dialog>
 
       <Dialog open={sharing} onClose={() => setSharing(false)} title="Share tour" wide>
         <SharePanel shareId={tour.shareId} title={tour.title} visibility={tour.visibility} />

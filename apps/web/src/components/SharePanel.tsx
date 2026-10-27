@@ -66,6 +66,9 @@ export function SharePanel({
   title: string;
   visibility: TourVisibility;
 }) {
+  const [autoplay, setAutoplay] = useState(false);
+  const [hideUi, setHideUi] = useState(false);
+  const options = { autoplay, ui: !hideUi };
   return (
     <div className="space-y-4">
       <p
@@ -77,8 +80,33 @@ export function SharePanel({
       >
         {VISIBILITY_NOTE[visibility]}
       </p>
-      <CopyField label="Share link" value={shareUrl(shareId)} />
-      <CopyField label="Embed code" value={embedSnippet(shareId, title)} multiline />
+      <fieldset className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+        <legend className="label">Options</legend>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            className="accent-brand-500"
+            checked={autoplay}
+            onChange={(e) => setAutoplay(e.target.checked)}
+          />
+          Start the walk-through automatically
+        </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            className="accent-brand-500"
+            checked={hideUi}
+            onChange={(e) => setHideUi(e.target.checked)}
+          />
+          Hide all controls
+        </label>
+      </fieldset>
+      <CopyField label="Share link" value={shareUrl(shareId, undefined, options)} />
+      <CopyField
+        label="Embed code"
+        value={embedSnippet(shareId, title, undefined, options)}
+        multiline
+      />
       <a
         className="btn-ghost -ml-2"
         href={shareUrl(shareId)}

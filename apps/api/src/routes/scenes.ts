@@ -4,13 +4,24 @@ import { and, count, eq, max, ne } from 'drizzle-orm';
 import {
   ALLOWED_UPLOAD_TYPES,
   createHotspotSchema,
+  deleteSceneQuerySchema,
   MAX_HOTSPOTS_PER_SCENE,
   presignUploadSchema,
   updateSceneSchema,
   uuidParamSchema,
   type PresignUploadResponse,
 } from '@btv/shared';
-import { allSceneKeys, hotspots, limitsForPlan, scenes, storageKeys, tours } from '@btv/core';
+import {
+  allSceneKeys,
+  appendToChain,
+  detachFromChain,
+  hotspots,
+  limitsForPlan,
+  lockTour,
+  scenes,
+  storageKeys,
+  tours,
+} from '@btv/core';
 import { badRequest, conflict, HttpError, limitReached } from '../errors.js';
 import { ah, currentUser, requireAuth } from '../middleware.js';
 import { loadOwnedScene, loadOwnedTour } from '../services/access.js';
@@ -51,29 +62,36 @@ export function scenesRouter(deps: AppDeps): Router {
           `Images can be at most ${Math.round(limits.maxUploadBytes / 1024 / 1024)} MB on your plan.`,
         );
       }
-      const [stats] = await db
-        .select({ n: count(), maxPos: max(scenes.position) })
-        .from(scenes)
-        .where(eq(scenes.tourId, tour.id));
-      if ((stats?.n ?? 0) >= limits.maxScenesPerTour) {
-        throw limitReached(`Your plan allows ${limits.maxScenesPerTour} scenes per tour.`);
-      }
-
       const id = randomUUID();
       const originalKey = storageKeys.original(id);
-      const [scene] = await db
-        .insert(scenes)
-        .values({
-          id,
-          tourId: tour.id,
-          name: sceneNameFromFilename(input.filename),
-          position: (stats?.maxPos ?? -1) + 1,
-          status: 'pending',
-          originalKey,
-          contentType: input.contentType,
-          sizeBytes: input.size,
-        })
-        .returning();
+      // One transaction: position = max + 1 (never a row count: deletes leave gaps) and the
+      // walk-through arrows to/from the previous scene.
+      const scene = await db.transaction(async (tx) => {
+        await lockTour(tx, tour.id);
+        const [stats] = await tx
+          .select({ n: count(), maxPos: max(scenes.position) })
+          .from(scenes)
+          .where(eq(scenes.tourId, tour.id));
+        if ((stats?.n ?? 0) >= limits.maxScenesPerTour) {
+          throw limitReached(`Your plan allows ${limits.maxScenesPerTour} scenes per tour.`);
+        }
+        const [inserted] = await tx
+          .insert(scenes)
+          .values({
+            id,
+            tourId: tour.id,
+            name: sceneNameFromFilename(input.filename),
+            position: (stats?.maxPos ?? -1) + 1,
+            status: 'pending',
+            originalKey,
+            contentType: input.contentType,
+            sizeBytes: input.size,
+          })
+          .returning();
+        await appendToChain(tx, tour.id, id);
+        await tx.update(tours).set({ updatedAt: new Date() }).where(eq(tours.id, tour.id));
+        return inserted!;
+      });
 
       const upload = await storage.presignUpload({
         key: originalKey,
@@ -81,10 +99,9 @@ export function scenesRouter(deps: AppDeps): Router {
         maxBytes: limits.maxUploadBytes,
         expiresInSeconds: config.UPLOAD_URL_TTL_SECONDS,
       });
-      await db.update(tours).set({ updatedAt: new Date() }).where(eq(tours.id, tour.id));
 
       const body: PresignUploadResponse = {
-        scene: await sceneWithHotspotsToDTO(db, storage, scene!),
+        scene: await sceneWithHotspotsToDTO(db, storage, scene),
         upload: {
           url: upload.url,
           fields: upload.fields,
@@ -201,8 +218,15 @@ export function scenesRouter(deps: AppDeps): Router {
     '/:id',
     ah(async (req, res) => {
       const { id } = parse(uuidParamSchema, req.params);
+      const { relink } = parse(deleteSceneQuerySchema, req.query);
       const { scene } = await loadOwnedScene(db, id, currentUser(req).id);
-      await db.delete(scenes).where(eq(scenes.id, scene.id));
+      await db.transaction(async (tx) => {
+        await lockTour(tx, scene.tourId);
+        // With ?relink=1 the scenes before and after are connected so the walk is not broken.
+        await detachFromChain(tx, scene.id, { bridge: relink === '1' });
+        await tx.delete(scenes).where(eq(scenes.id, scene.id));
+        await tx.update(tours).set({ updatedAt: new Date() }).where(eq(tours.id, scene.tourId));
+      });
       storage.delete(allSceneKeys(scene)).catch((err: unknown) => {
         logger.warn({ err, sceneId: scene.id }, 'failed to delete scene objects');
       });
@@ -225,7 +249,7 @@ export function scenesRouter(deps: AppDeps): Router {
         throw badRequest(`A scene can have at most ${MAX_HOTSPOTS_PER_SCENE} hotspots.`);
       }
 
-      if (input.type === 'link') {
+      if (input.kind !== 'info') {
         const [target] = await db
           .select({ id: scenes.id })
           .from(scenes)
@@ -243,26 +267,30 @@ export function scenesRouter(deps: AppDeps): Router {
       const [hotspot] = await db
         .insert(hotspots)
         .values(
-          input.type === 'link'
+          input.kind === 'info'
             ? {
                 sceneId: scene.id,
-                type: 'link',
-                yaw: input.yaw,
-                pitch: input.pitch,
-                targetSceneId: input.targetSceneId,
-                title: input.title,
-              }
-            : {
-                sceneId: scene.id,
-                type: 'info',
+                kind: 'info',
                 yaw: input.yaw,
                 pitch: input.pitch,
                 title: input.title,
                 text: input.text,
                 imageUrl: input.imageUrl,
+              }
+            : {
+                sceneId: scene.id,
+                kind: input.kind,
+                yaw: input.yaw,
+                pitch: input.pitch,
+                targetSceneId: input.targetSceneId,
+                title: input.title,
               },
         )
+        .onConflictDoNothing()
         .returning();
+      if (!hotspot) {
+        throw conflict('duplicate_arrow', `This scene already has a ${input.kind} arrow there.`);
+      }
       res.status(201).json({ hotspot: hotspotToDTO(hotspot!) });
     }),
   );

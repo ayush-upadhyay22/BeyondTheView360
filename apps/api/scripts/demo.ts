@@ -4,7 +4,7 @@ export const DEMO = {
   password: process.env.DEMO_PASSWORD ?? 'beyond-the-view-demo',
   tourTitle: 'Demo tour',
   tourDescription:
-    'Synthetic sample scenes generated on your machine. Swap in your own 2:1 photos.',
+    'Walk through five synthetic rooms generated on your machine. Click a floor arrow to step into the next room, or press Walk through.',
   /** Fixed share id so the demo is always at /t/demo-tour-360. */
   shareId: 'demo-tour-360',
 } as const;

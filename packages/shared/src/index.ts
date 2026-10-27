@@ -3,3 +3,7 @@ export * from './schemas.js';
 export * from './dto.js';
 export * from './variants.js';
 export * from './geometry.js';
+export * from './walk.js';
+export * from './floorplan.js';
+export * from './viewerParams.js';
+export * from './chain.js';

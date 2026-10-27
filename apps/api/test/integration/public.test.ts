@@ -93,8 +93,8 @@ describe.skipIf(!integrationEnabled)('public tour page, embed data and view coun
     expect(body.scenes.map((s) => s.id)).toEqual([ready.id]);
     expect(body.startSceneId).toBe(ready.id);
     const hotspots = body.scenes[0]!.hotspots;
-    // The link to the unfinished scene is dropped; text is returned verbatim (escaped by React).
-    expect(hotspots.map((h) => h.type)).toEqual(['info']);
+    // Arrows/links to the unfinished scene are dropped; text is returned verbatim (escaped by React).
+    expect(hotspots.map((h) => h.kind)).toEqual(['info']);
     expect(hotspots[0]!.title).toBe('Fireplace <b>original</b>');
     // No owner or internal fields leak.
     expect(JSON.stringify(body)).not.toMatch(/ownerId|originalKey|email/);

@@ -4,9 +4,11 @@
 sharing 360° virtual tours: upload equirectangular photos, link them with hotspots, and publish a
 tour as a share link or an `<iframe>` embed.
 
+- **Walk-through** — rooms uploaded in order are auto-linked with floor arrows; visitors walk
+  from room to room with a short turn-and-zoom, or press **Walk through** for a guided tour.
 - **Editor** — drag-and-drop multi-upload with progress, live processing status, scene
-  ordering/renaming, click-to-place link and info hotspots, start view and north from the live
-  camera, autosave.
+  ordering/renaming, drag arrows onto doors, click-to-place link and info hotspots, start view
+  and north from the live camera, optional floor-plan pins, autosave.
 - **Viewer** — Three.js, drag/inertia, wheel and pinch zoom, autorotate (respects reduced
   motion), fullscreen, gyroscope (incl. iOS permission), VR split-screen with gaze activation,
   progressive loading (blurred placeholder → right-sized variant → optional 8K), keyboard control.
@@ -21,7 +23,7 @@ tour as a share link or an `<iframe>` embed.
 ## Contents
 
 [Architecture](#architecture) · [Stack](#stack) · [Prerequisites](#prerequisites) ·
-[Quick start](#quick-start) · [Testing with images](#testing-with-images) ·
+[Quick start](#quick-start) · [Walk-through tours](#walk-through-tours) · [Testing with images](#testing-with-images) ·
 [Configuration](#configuration) · [Project layout](#project-layout) · [API](#api) ·
 [Scripts](#scripts) · [Testing](#testing) · [Troubleshooting](#troubleshooting) ·
 [Deploying to production](#deploying-to-production) · [Roadmap](#roadmap)
@@ -106,11 +108,45 @@ override values. MinIO's console is at <http://localhost:9001> (`btvminio` /
 
 `/demo` shows the viewer with two panoramas drawn in the browser, without any backend.
 
+## Walk-through tours
+
+Upload rooms **in the order a visitor should walk them**. Each new photo is automatically
+connected to the previous one:
+
+- the previous room gets a floor **next** arrow (yaw 0, slightly below the horizon)
+- the new room gets a floor **back** arrow (yaw 180)
+
+Name files so they sort the way you want them walked (`01-hall.jpg`, `02-kitchen.jpg`,
+`03-bedroom.jpg`). The editor uploads one file after another in the order you selected or
+dropped; a file-picker that re-sorts alphabetically can change that order, so numbered
+prefixes are the reliable fix.
+
+After upload:
+
+1. Drag each floor arrow onto the doorway it leads through (a drag never walks).
+2. Drag a scene thumbnail from the list onto the view to add a labelled jump to another room.
+3. Use **Link all scenes in order** to fill any missing next/back arrows without touching
+   custom links. After a reorder, **Re-link in order** rebuilds the chain to match the list.
+4. Visitors click an arrow to walk: the camera turns toward it, zooms in, fades, and arrives
+   facing the same way. **Walk through** stays in each room for a few seconds, then follows
+   the next arrows to the end. Any drag, click or key press stops it.
+
+Share and embed query params (also available as checkboxes in the share dialog):
+
+| Param         | Effect                                                     |
+| ------------- | ---------------------------------------------------------- |
+| `?scene=<id>` | Open on that scene                                         |
+| `?autoplay=1` | Start the guided walk as soon as the first room is visible |
+| `?ui=0`       | Hide every control (kiosk / background embeds)             |
+
+Images must be **2:1 equirectangular** panoramas, at least 2048 px wide (JPEG, PNG or WebP).
+A 4:1 phone panorama will be rejected with a readable error.
+
 ## Testing with images
 
-- `npm run samples:generate` writes three valid original synthetic panoramas (JPEG, PNG, WebP)
-  and one **invalid** 4:1 image that the worker must reject with a readable error.
-  Add `-- --width 8192` for 8K images.
+- `npm run samples:generate` writes five original synthetic rooms (hall → kitchen → living →
+  bedroom → garden) and one **invalid** 4:1 image that the worker must reject with a readable
+  error. Add `-- --width 8192` for 8K images.
 - Drop your own **2:1 equirectangular** photos (≥ 2048 px wide) into [`samples/`](samples/) and run
   `npm run samples:upload`, or drag them into the editor.
 - Phone cameras and most 360° cameras (Ricoh Theta, Insta360, GoPro Max) export equirectangular
@@ -184,14 +220,14 @@ docker-compose.yml   Postgres, Redis, MinIO, one-shot bucket/CORS setup
 
 All endpoints are under `/api`; see [`docs/API.md`](docs/API.md) for bodies, responses and errors.
 
-| Area     | Endpoints                                                                                                                                  |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Health   | `GET /healthz`, `GET /readyz`                                                                                                              |
-| Auth     | `POST /auth/signup`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`                                                               |
-| Tours    | `GET/POST /tours`, `GET/PATCH/DELETE /tours/:id`, `PUT /tours/:id/scenes/order`, `GET /tours/:id/stats`                                    |
-| Scenes   | `POST /scenes/presign`, `POST /scenes/:id/complete`, `POST /scenes/:id/retry`, `GET/PATCH/DELETE /scenes/:id`, `POST /scenes/:id/hotspots` |
-| Hotspots | `PATCH/DELETE /hotspots/:id`                                                                                                               |
-| Public   | `GET /public/tours/:shareId`, `POST /public/tours/:shareId/views`                                                                          |
+| Area     | Endpoints                                                                                                                                                                   |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Health   | `GET /healthz`, `GET /readyz`                                                                                                                                               |
+| Auth     | `POST /auth/signup`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`                                                                                                |
+| Tours    | `GET/POST /tours`, `GET/PATCH/DELETE /tours/:id`, `PUT /tours/:id/scenes/order`, `POST /tours/:id/link-in-order`, floor-plan and nearby-link routes, `GET /tours/:id/stats` |
+| Scenes   | `POST /scenes/presign`, `POST /scenes/:id/complete`, `POST /scenes/:id/retry`, `GET/PATCH/DELETE /scenes/:id`, `POST /scenes/:id/hotspots`                                  |
+| Hotspots | `PATCH/DELETE /hotspots/:id`                                                                                                                                                |
+| Public   | `GET /public/tours/:shareId`, `POST /public/tours/:shareId/views`                                                                                                           |
 
 ## Scripts
 
@@ -231,6 +267,7 @@ All endpoints are under `/api`; see [`docs/API.md`](docs/API.md) for bodies, res
 | Scenes stay "Queued"                          | The worker is not running (`npm run dev` starts it) or `QUEUE_PREFIX`/`REDIS_URL` differ between API and worker.                                                                                |
 | Scene "Failed" with a ratio/size message      | The image is not a 2:1 equirectangular panorama ≥ 2048 px wide. That is expected for `invalid-wide-strip.jpg`.                                                                                  |
 | Images don't load in the viewer (403/expired) | Clock skew or a wrong `S3_PUBLIC_ENDPOINT`; browsers must reach the same host the URL was signed for.                                                                                           |
+| Rooms uploaded in the wrong order             | File pickers often sort alphabetically. Prefix files `01-hall.jpg`, `02-kitchen.jpg`… or use **Re-link in order** after dragging the scene list.                                                |
 | `samples:upload`: "Cannot reach the API"      | Start `npm run dev` first; run `npm run db:seed` if login fails.                                                                                                                                |
 | "WebGL is not available"                      | Enable hardware acceleration in the browser.                                                                                                                                                    |
 | `sharp` install errors                        | Use Node 20.12+ on a supported platform; delete `node_modules` and run `npm install` again.                                                                                                     |
@@ -302,7 +339,6 @@ Out of scope for this version, with marked extension points in the code (`EXTENS
 - **Payments / paid plans** — `packages/core/src/plans.ts` (a billing webhook updates
   `users.plan`; limits are already plan-driven).
 - **Custom domains** — host-based tour lookup in `apps/api/src/routes/public.ts`.
-- **Floor plans / minimaps** — DTO hook in `packages/shared/src/dto.ts`.
 - **AI enhancement** (denoise, auto-level, sky replacement) — pipeline stage in
   `apps/worker/src/image/pipeline.ts`.
 - **Mobile app** — bearer-token sessions in `apps/api/src/middleware.ts`.

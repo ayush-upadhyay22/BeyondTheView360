@@ -6,6 +6,8 @@ import {
   allSceneKeys,
   createRedisConnection,
   DEAD_LETTER_QUEUE,
+  detachFromChain,
+  lockTour,
   SCENE_QUEUE,
   sceneJobId,
   sceneJobOptions,
@@ -133,10 +135,23 @@ export function startWorker(deps: WorkerDeps): RunningWorker {
 
     // Uploads that were presigned but never completed.
     const abandonedBefore = new Date(Date.now() - config.PENDING_UPLOAD_TTL_HOURS * 3600_000);
-    const abandoned = await db
-      .delete(scenes)
+    const stale = await db
+      .select({ id: scenes.id, tourId: scenes.tourId })
+      .from(scenes)
       .where(and(eq(scenes.status, 'pending'), lt(scenes.createdAt, abandonedBefore)))
-      .returning({ id: scenes.id, variants: scenes.variants });
+      .limit(100);
+    const abandoned: { id: string; variants: number[] }[] = [];
+    for (const s of stale) {
+      const removed = await db.transaction(async (tx) => {
+        await lockTour(tx, s.tourId);
+        await detachFromChain(tx, s.id, { bridge: true });
+        return tx
+          .delete(scenes)
+          .where(and(eq(scenes.id, s.id), eq(scenes.status, 'pending')))
+          .returning({ id: scenes.id, variants: scenes.variants });
+      });
+      abandoned.push(...removed);
+    }
     if (abandoned.length) {
       await storage.delete(abandoned.flatMap(allSceneKeys)).catch(() => undefined);
       logger.info({ count: abandoned.length }, 'removed abandoned uploads');

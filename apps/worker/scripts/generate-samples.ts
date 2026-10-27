@@ -1,7 +1,8 @@
 /**
- * Generates original synthetic equirectangular panoramas into ./samples (repo root):
- * three valid scenes (JPEG, PNG, WebP) and one deliberately invalid image (4:1 ratio)
- * to exercise the worker's validation. Fully offline and deterministic.
+ * Generates original synthetic equirectangular rooms into ./samples (repo root):
+ * five valid walk-through scenes (hall → kitchen → living → bedroom → garden) plus one
+ * deliberately invalid image (4:1 ratio) to exercise the worker's validation.
+ * Fully offline and deterministic.
  *
  *   npm run samples:generate [-- --width 4096]
  */
@@ -61,6 +62,78 @@ function svg(defs: string, body: string) {
   );
 }
 
+function roomLabel(name: string, fill: string) {
+  return `${label(0, -28, name, H * 0.04, fill)}${label(180, -28, '← back', H * 0.022, fill)}${label(0, 18, 'next →', H * 0.022, fill)}`;
+}
+
+function hall() {
+  const doors = wrap(
+    `<rect x="${X(-14)}" y="${Y(28)}" width="${(28 / 360) * W}" height="${Y(-8) - Y(28)}" fill="#3d2a1a"/>
+     <rect x="${X(-12)}" y="${Y(26)}" width="${(24 / 360) * W}" height="${Y(-8) - Y(26)}" fill="#6b4423"/>
+     <rect x="${X(166)}" y="${Y(28)}" width="${(28 / 360) * W}" height="${Y(-8) - Y(28)}" fill="#3d2a1a"/>
+     <rect x="${X(168)}" y="${Y(26)}" width="${(24 / 360) * W}" height="${Y(-8) - Y(26)}" fill="#5a381c"/>`,
+  );
+  let panels = '';
+  for (let yaw = -180; yaw < 180; yaw += 18) {
+    panels += `<line x1="${X(yaw)}" x2="${X(yaw)}" y1="${Y(42)}" y2="${Y(-10)}" stroke="#d8cbb8" stroke-width="${H * 0.0015}"/>`;
+  }
+  return svg(
+    `<linearGradient id="hallWall" x1="0" y1="0" x2="0" y2="1">
+       <stop offset="0" stop-color="#f3eadc"/><stop offset="1" stop-color="#e4d4bc"/></linearGradient>
+     <linearGradient id="hallFloor" x1="0" y1="0" x2="0" y2="1">
+       <stop offset="0" stop-color="#8b5a2b"/><stop offset="1" stop-color="#5c3a1a"/></linearGradient>`,
+    `<rect width="${W}" height="${Y(42)}" fill="#efe6d4"/>
+     <rect y="${Y(42)}" width="${W}" height="${Y(-10) - Y(42)}" fill="url(#hallWall)"/>
+     ${panels}
+     <rect y="${Y(-10)}" width="${W}" height="${H - Y(-10)}" fill="url(#hallFloor)"/>
+     ${doors}${compass('#5b4a35')}${roomLabel('Hall', '#5b4a35')}`,
+  );
+}
+
+function kitchen() {
+  let tiles = '';
+  for (let p = -8; p > -88; p -= 8) {
+    tiles += `<line x1="0" x2="${W}" y1="${Y(p)}" y2="${Y(p)}" stroke="#c9d4dc" stroke-width="${H * 0.002}"/>`;
+  }
+  for (let yaw = -180; yaw < 180; yaw += 8) {
+    tiles += `<line x1="${X(yaw)}" x2="${X(yaw)}" y1="${Y(-8)}" y2="${H}" stroke="#c9d4dc" stroke-width="${H * 0.002}"/>`;
+  }
+  let cabinets = '';
+  for (let yaw = -160; yaw < 160; yaw += 28) {
+    cabinets += `<rect x="${X(yaw)}" y="${Y(8)}" width="${(22 / 360) * W}" height="${Y(-8) - Y(8)}" fill="#f4f1ea" stroke="#b8a48a"/>`;
+    cabinets += `<rect x="${X(yaw)}" y="${Y(38)}" width="${(22 / 360) * W}" height="${Y(14) - Y(38)}" fill="#efe8db" stroke="#b8a48a"/>`;
+  }
+  return svg(
+    `<linearGradient id="kWall" x1="0" y1="0" x2="0" y2="1">
+       <stop offset="0" stop-color="#e8f0f4"/><stop offset="1" stop-color="#d3e0e6"/></linearGradient>`,
+    `<rect width="${W}" height="${Y(40)}" fill="#f7fbff"/>
+     <rect y="${Y(40)}" width="${W}" height="${Y(-8) - Y(40)}" fill="url(#kWall)"/>
+     <rect y="${Y(-8)}" width="${W}" height="${H - Y(-8)}" fill="#eef3f6"/>
+     ${tiles}${wrap(cabinets)}
+     <ellipse cx="${X(90)}" cy="${Y(52)}" rx="${W * 0.04}" ry="${H * 0.012}" fill="#fff6d0" opacity="0.7"/>
+     ${compass('#3a4a52')}${roomLabel('Kitchen', '#3a4a52')}`,
+  );
+}
+
+function bedroom() {
+  let drapes = '';
+  for (let yaw = 40; yaw < 80; yaw += 4) {
+    drapes += `<rect x="${X(yaw)}" y="${Y(36)}" width="${(3.2 / 360) * W}" height="${Y(-6) - Y(36)}" fill="hsl(250,28%,${55 + ((yaw - 40) % 8)}%)"/>`;
+  }
+  return svg(
+    `<linearGradient id="bedSky" x1="0" y1="0" x2="0" y2="1">
+       <stop offset="0" stop-color="#1b2744"/><stop offset="1" stop-color="#6b5b8a"/></linearGradient>
+     <linearGradient id="bedWall" x1="0" y1="0" x2="0" y2="1">
+       <stop offset="0" stop-color="#e8e0f0"/><stop offset="1" stop-color="#cfc4dc"/></linearGradient>`,
+    `<rect width="${W}" height="${Y(36)}" fill="url(#bedSky)"/>
+     <rect y="${Y(36)}" width="${W}" height="${Y(-8) - Y(36)}" fill="url(#bedWall)"/>
+     <rect y="${Y(-8)}" width="${W}" height="${H - Y(-8)}" fill="#8a7380"/>
+     ${wrap(drapes)}
+     <rect x="${X(-40)}" y="${Y(-6)}" width="${(80 / 360) * W}" height="${H * 0.08}" fill="#6b4f7a"/>
+     ${compass('#efe6f7')}${roomLabel('Bedroom', '#efe6f7')}`,
+  );
+}
+
 function courtyard() {
   const r = rng(7);
   let buildings = '';
@@ -94,8 +167,7 @@ function courtyard() {
      ${tiles}
      <circle cx="${X(-60)}" cy="${Y(45)}" r="${H * 0.06}" fill="url(#sun)"/>
      ${wrap(buildings)}
-     ${compass('#ffffff')}
-     ${label(0, -30, 'Sample · Courtyard', H * 0.035, '#5b4a35')}`,
+     ${compass('#ffffff')}${roomLabel('Garden', '#5b4a35')}`,
   );
 }
 
@@ -126,48 +198,18 @@ function gallery() {
      <rect y="${Y(40)}" width="${W}" height="${Y(-12) - Y(40)}" fill="url(#wall)"/>
      <rect y="${Y(-12)}" width="${W}" height="${H - Y(-12)}" fill="#8a6a4a"/>
      ${boards}${lights}${wrap(art)}
-     ${compass('#3a3a3a')}
-     ${label(0, -40, 'Sample · Gallery', H * 0.035, '#f4efe6')}`,
-  );
-}
-
-function rooftop() {
-  const r = rng(99);
-  let stars = '';
-  for (let i = 0; i < 400; i++) {
-    stars += `<circle cx="${r() * W}" cy="${r() * Y(25)}" r="${H * 0.0012 * (0.5 + r())}" fill="#fff" opacity="${0.3 + r() * 0.7}"/>`;
-  }
-  let skyline = '';
-  for (let yaw = -180; yaw < 180;) {
-    const span = 3 + r() * 7;
-    const top = 2 + r() * 14;
-    skyline += `<rect x="${X(yaw)}" y="${Y(top)}" width="${(span / 360) * W + 1}" height="${Y(0) - Y(top) + 1}" fill="#141029"/>`;
-    for (let i = 0; i < 6; i++) {
-      if (r() > 0.55) {
-        skyline += `<rect x="${X(yaw + r() * span * 0.9)}" y="${Y(top * r())}" width="${W * 0.002}" height="${H * 0.004}" fill="#ffd27a"/>`;
-      }
-    }
-    yaw += span;
-  }
-  return svg(
-    `<linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1">
-       <stop offset="0" stop-color="#0b0b2b"/><stop offset="0.38" stop-color="#5a2d6e"/>
-       <stop offset="0.5" stop-color="#ff9a5a"/></linearGradient>`,
-    `<rect width="${W}" height="${H / 2}" fill="url(#dusk)"/>
-     ${stars}${wrap(skyline)}
-     <rect y="${Y(0)}" width="${W}" height="${H / 2}" fill="#2a2433"/>
-     <rect y="${Y(-8)}" width="${W}" height="${H * 0.01}" fill="#4a4157"/>
-     ${compass('#ffe3c4')}
-     ${label(0, -30, 'Sample · Rooftop', H * 0.035, '#bfb3d6')}`,
+     ${compass('#3a3a3a')}${roomLabel('Living room', '#5b4a35')}`,
   );
 }
 
 async function main() {
   await mkdir(outDir, { recursive: true });
   const outputs: [string, () => Promise<Buffer>][] = [
-    ['01-courtyard.jpg', () => sharp(courtyard()).jpeg({ quality: 88, mozjpeg: true }).toBuffer()],
-    ['02-gallery.png', () => sharp(gallery()).png({ compressionLevel: 9 }).toBuffer()],
-    ['03-rooftop.webp', () => sharp(rooftop()).webp({ quality: 88 }).toBuffer()],
+    ['01-hall.jpg', () => sharp(hall()).jpeg({ quality: 88, mozjpeg: true }).toBuffer()],
+    ['02-kitchen.png', () => sharp(kitchen()).png({ compressionLevel: 9 }).toBuffer()],
+    ['03-living.jpg', () => sharp(gallery()).jpeg({ quality: 88, mozjpeg: true }).toBuffer()],
+    ['04-bedroom.webp', () => sharp(bedroom()).webp({ quality: 88 }).toBuffer()],
+    ['05-garden.jpg', () => sharp(courtyard()).jpeg({ quality: 88, mozjpeg: true }).toBuffer()],
     [
       'invalid-wide-strip.jpg',
       () =>

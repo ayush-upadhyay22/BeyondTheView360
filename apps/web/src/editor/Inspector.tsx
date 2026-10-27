@@ -12,6 +12,13 @@ import {
 import { CloseIcon, CrosshairIcon, TrashIcon } from '../components/icons';
 import { AutoField } from './AutoField';
 
+const KIND_TITLE: Record<HotspotDTO['kind'], string> = {
+  next: 'Next arrow',
+  back: 'Back arrow',
+  link: 'Link',
+  info: 'Info point',
+};
+
 const VISIBILITY_HELP: Record<TourVisibility, string> = {
   private: 'Only you can view it.',
   unlisted: 'Anyone with the link can view it.',
@@ -25,6 +32,7 @@ export function HotspotPanel({
   onDelete,
   onClose,
   onLookAt,
+  onWalk,
 }: {
   hotspot: HotspotDTO;
   /** Ready scenes of the tour (link targets). */
@@ -33,15 +41,17 @@ export function HotspotPanel({
   onDelete: () => void;
   onClose: () => void;
   onLookAt: () => void;
+  onWalk: () => void;
 }) {
   const targetId = useId();
+  const isNav = hotspot.kind !== 'info';
   const targets = scenes.filter((s) => s.id !== hotspot.sceneId);
 
   return (
     <section aria-labelledby="hotspot-heading" className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 id="hotspot-heading" className="font-semibold">
-          {hotspot.type === 'link' ? 'Link hotspot' : 'Info hotspot'}
+          {KIND_TITLE[hotspot.kind]}
         </h2>
         <button
           type="button"
@@ -53,8 +63,14 @@ export function HotspotPanel({
         </button>
       </div>
 
-      {hotspot.type === 'link' ? (
+      {isNav ? (
         <>
+          {hotspot.kind !== 'link' && (
+            <p className="text-xs text-slate-400">
+              Part of the walk-through, created from the upload order. Drag it onto the doorway it
+              leads through.
+            </p>
+          )}
           <div>
             <label className="label" htmlFor={targetId}>
               Goes to
@@ -116,7 +132,12 @@ export function HotspotPanel({
         Drag the marker in the viewer to move it. Position: {hotspot.yaw.toFixed(1)}°,{' '}
         {hotspot.pitch.toFixed(1)}°
       </p>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
+        {isNav && hotspot.targetSceneId && (
+          <button type="button" className="btn-secondary flex-1" onClick={onWalk}>
+            Walk there
+          </button>
+        )}
         <button type="button" className="btn-secondary flex-1" onClick={onLookAt}>
           <CrosshairIcon size={16} /> Look at
         </button>

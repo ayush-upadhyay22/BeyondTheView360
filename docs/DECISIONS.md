@@ -290,3 +290,39 @@ available on the verification machine, so Postgres 16, Redis 7 and MinIO ran nat
 same ports, credentials and CORS settings as `docker-compose.yml`. npm 11 may print an
 "install-scripts" notice for sharp/esbuild; both work from their prebuilt platform packages, so
 no action is needed.
+
+## Walk-through tours
+
+**D53. Scene position is max + 1.** `presign` locks the tour row, then sets `position` to
+`max(position) + 1`. Row counts are never used: deletes leave gaps so a new upload always sorts
+after every surviving scene.
+
+**D54. Hotspot `kind` with a legacy column name.** The column stays `type` so existing rows keep
+working. Allowed values are `next`, `back`, `link`, `info`; a missing kind (or a body that still
+sends `type`) is treated as `link`. A partial unique index on `(scene, kind, target)` for
+next/back makes auto-linking idempotent. Max 50 hotspots per scene.
+
+**D55. Auto-link in the same transaction as the insert.** After the new scene row is written,
+`appendToChain` adds previous→next (yaw 0, pitch −0.3 rad) and new→back (yaw π, pitch −0.3 rad)
+unless the previous scene is already at the hotspot limit. Rejected or abandoned uploads are
+bridged out of the chain by the worker so a bad photo does not break the walk.
+
+**D56. Link-in-order is a plan, then a write.** `planChain` (shared, unit-tested) computes the
+add/remove set. `missing` only inserts absent next/back arrows; `rebuild` also deletes ones that
+no longer match the order. Custom `link` and `info` hotspots are never touched. The editor offers
+both after a reorder.
+
+**D57. Walking transition.** Shared timing helpers (`walkOutPose` / `walkInPose`) turn the
+shortest way, dip the pitch, zoom the FOV by 22° and fade to black in 450 ms, wait until the
+next texture is decoded, swap, then restore. Reduced motion is a plain fade. Arrival yaw keeps
+the compass heading (`walkYaw − fromNorth + toNorth`). Only one walk runs at a time.
+
+**D58. Guided walk.** “Walk through” dwells 3.5 s with a slow autorotate, then follows the
+current scene’s `next` arrow. It restarts from the first room if started on the last one, and
+stops after the last room or on any user drag, click or key. `?scene=`, `?autoplay=1` and
+`?ui=0` are parsed once and work on the public page and the embed.
+
+**D59. Floor-plan pins.** Optional WebP plan per tour; pins are fractions 0…1. Bearings are
+clockwise from plan-up, corrected for the plan’s aspect ratio and the scene’s north offset.
+“Auto-link nearby” inserts `link` hotspots toward the k nearest pinned neighbours without
+removing anything.

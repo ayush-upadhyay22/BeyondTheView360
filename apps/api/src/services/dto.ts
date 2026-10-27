@@ -10,6 +10,7 @@ import {
   type TourRow,
 } from '@btv/core';
 import type {
+  FloorPlanDTO,
   HotspotDTO,
   PublicTourDTO,
   SceneDTO,
@@ -22,7 +23,7 @@ export function hotspotToDTO(h: HotspotRow): HotspotDTO {
   return {
     id: h.id,
     sceneId: h.sceneId,
-    type: h.type,
+    kind: h.kind,
     yaw: h.yaw,
     pitch: h.pitch,
     title: h.title,
@@ -55,6 +56,8 @@ async function viewerFields(
     height: scene.height,
     northOffset: scene.northOffset,
     startView: scene.startView ?? null,
+    mapX: scene.mapX,
+    mapY: scene.mapY,
     placeholder: ready ? scene.placeholder : null,
     thumbUrl: ready && scene.thumbKey ? await storage.publicUrl(scene.thumbKey) : null,
     variants,
@@ -145,6 +148,15 @@ export async function tourSummaryToDTO(
   };
 }
 
+async function floorPlanToDTO(storage: StorageDriver, tour: TourRow): Promise<FloorPlanDTO | null> {
+  if (!tour.floorPlanKey || !tour.floorPlanWidth || !tour.floorPlanHeight) return null;
+  return {
+    url: await storage.publicUrl(tour.floorPlanKey),
+    width: tour.floorPlanWidth,
+    height: tour.floorPlanHeight,
+  };
+}
+
 export async function tourToDTO(
   db: Database,
   storage: StorageDriver,
@@ -161,11 +173,12 @@ export async function tourToDTO(
     description: tour.description,
     startSceneId: tour.startSceneId,
     startView: tour.startView ?? null,
+    floorPlan: await floorPlanToDTO(storage, tour),
     scenes: await Promise.all(rows.map((r) => sceneToDTO(storage, r.scene, r.hotspots))),
   };
 }
 
-/** Public projection: only ready scenes, and only links between ready scenes. */
+/** Public projection: only ready scenes, and only arrows/links between ready scenes. */
 export async function publicTourToDTO(
   db: Database,
   storage: StorageDriver,
@@ -178,7 +191,7 @@ export async function publicTourToDTO(
       viewerFields(
         storage,
         r.scene,
-        r.hotspots.filter((h) => h.type !== 'link' || readyIds.has(h.targetSceneId ?? '')),
+        r.hotspots.filter((h) => h.kind === 'info' || readyIds.has(h.targetSceneId ?? '')),
       ),
     ),
   );
@@ -192,6 +205,7 @@ export async function publicTourToDTO(
         ? tour.startSceneId
         : (viewerScenes[0]?.id ?? null),
     startView: tour.startView ?? null,
+    floorPlan: await floorPlanToDTO(storage, tour),
     scenes: viewerScenes,
   };
 }

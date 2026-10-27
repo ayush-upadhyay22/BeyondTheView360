@@ -1,7 +1,7 @@
 import { useParams } from 'react-router-dom';
 import { BRAND } from '../config';
 import { Spinner } from '../components/feedback';
-import { usePublicTour, useDocumentTitle, useViewPing } from '../lib/publicTour';
+import { usePublicTour, useDocumentTitle, useViewerParams, useViewPing } from '../lib/publicTour';
 import { shareUrl } from '../lib/share';
 import { TourPlayer } from '../viewer/TourPlayer';
 import { NoScenes, TourUnavailable } from './PublicTour';
@@ -11,6 +11,7 @@ export default function EmbedTour() {
   const { shareId = '' } = useParams();
   const query = usePublicTour(shareId);
   const tour = query.data;
+  const view = useViewerParams(tour);
   useDocumentTitle(tour?.title);
   useViewPing(shareId, !!tour && tour.scenes.length > 0);
 
@@ -28,20 +29,24 @@ export default function EmbedTour() {
         <TourPlayer
           className="h-full w-full"
           scenes={tour.scenes}
-          startSceneId={tour.startSceneId}
-          startView={tour.startView}
+          startSceneId={view.startSceneId}
+          startView={view.startView}
+          floorPlan={tour.floorPlan}
+          autoplay={view.autoplay}
           title={tour.title}
-          chrome="full"
+          chrome={view.ui ? 'full' : 'none'}
         >
-          <a
-            href={shareUrl(shareId)}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-viewer-ui
-            className="absolute right-[4.5rem] top-5 rounded-full bg-black/50 px-2.5 py-1 text-[11px] text-slate-200 backdrop-blur hover:bg-black/70"
-          >
-            {BRAND.name} ↗
-          </a>
+          {view.ui && (
+            <a
+              href={shareUrl(shareId)}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-viewer-ui
+              className="absolute right-[4.5rem] top-5 rounded-full bg-black/50 px-2.5 py-1 text-[11px] text-slate-200 backdrop-blur hover:bg-black/70"
+            >
+              {BRAND.name} ↗
+            </a>
+          )}
         </TourPlayer>
       )}
     </div>

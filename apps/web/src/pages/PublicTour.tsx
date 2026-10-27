@@ -5,7 +5,7 @@ import { EmptyState, ErrorState, FullPageSpinner } from '../components/feedback'
 import { ImagesIcon } from '../components/icons';
 import { ApiError, errorMessage } from '../lib/api';
 import { useMe } from '../lib/auth';
-import { useDocumentTitle, usePublicTour, useViewPing } from '../lib/publicTour';
+import { useDocumentTitle, usePublicTour, useViewerParams, useViewPing } from '../lib/publicTour';
 import { TourPlayer } from '../viewer/TourPlayer';
 
 export function TourUnavailable({ error, compact = false }: { error: unknown; compact?: boolean }) {
@@ -48,6 +48,7 @@ export default function PublicTour() {
   const query = usePublicTour(shareId);
   const me = useMe();
   const tour = query.data;
+  const view = useViewerParams(tour);
   useDocumentTitle(tour?.title);
   useViewPing(shareId, !!tour && tour.scenes.length > 0);
 
@@ -74,20 +75,24 @@ export default function PublicTour() {
             <TourPlayer
               className="h-full w-full"
               scenes={tour.scenes}
-              startSceneId={tour.startSceneId}
-              startView={tour.startView}
+              startSceneId={view.startSceneId}
+              startView={view.startView}
+              floorPlan={tour.floorPlan}
+              autoplay={view.autoplay}
               title={tour.title}
-              chrome="full"
+              chrome={view.ui ? 'full' : 'none'}
             />
           </div>
         )}
       </main>
-      <footer className="flex items-center justify-between gap-4 border-t border-ink-800 px-4 py-2 text-xs text-slate-400">
-        <p className="line-clamp-1 min-w-0">{tour.description}</p>
-        <span className="flex shrink-0 items-center gap-2">
-          Made with <Logo className="text-slate-200" />
-        </span>
-      </footer>
+      {view.ui && (
+        <footer className="flex items-center justify-between gap-4 border-t border-ink-800 px-4 py-2 text-xs text-slate-400">
+          <p className="line-clamp-1 min-w-0">{tour.description}</p>
+          <span className="flex shrink-0 items-center gap-2">
+            Made with <Logo className="text-slate-200" />
+          </span>
+        </footer>
+      )}
     </div>
   );
 }

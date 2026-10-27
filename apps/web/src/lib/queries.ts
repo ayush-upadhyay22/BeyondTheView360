@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import type {
   CreateHotspotInput,
   HotspotDTO,
+  LinkInOrderInput,
+  LinkResultDTO,
   SceneDTO,
   TourDTO,
   TourStatsDTO,
@@ -11,6 +13,7 @@ import type {
   UpdateTourInput,
 } from '@btv/shared';
 import { del, get, patch, post, put } from './api';
+import { uploadFloorPlan } from './floorPlan';
 
 export const toursKey = ['tours'] as const;
 export const tourKey = (id: string) => ['tour', id] as const;
@@ -133,8 +136,9 @@ export function useUpdateScene(tourId: string) {
 export function useDeleteScene(tourId: string) {
   return useTourMutation(
     tourId,
-    (id: string) => del(`/scenes/${id}`),
-    (tour, id) => {
+    ({ id, relink }: { id: string; relink: boolean }) =>
+      del(`/scenes/${id}${relink ? '?relink=1' : ''}`),
+    (tour, { id }) => {
       const next = mapHotspots(tour, (hs) => hs.filter((h) => h.targetSceneId !== id));
       return {
         ...next,
@@ -201,4 +205,39 @@ export function useDeleteHotspot(tourId: string) {
     (id: string) => del(`/hotspots/${id}`),
     (tour, id) => mapHotspots(tour, (hs) => hs.filter((h) => h.id !== id)),
   );
+}
+
+type TourResult = { result: LinkResultDTO; tour: TourDTO };
+
+/** Server-side bulk edits that return the whole tour: no optimistic change, just replace it. */
+function useTourReplace<TVars, TRes extends { tour: TourDTO }>(
+  tourId: string,
+  fn: (vars: TVars) => Promise<TRes>,
+) {
+  return useTourMutation(
+    tourId,
+    fn,
+    (tour) => tour,
+    (res, qc) => qc.setQueryData(tourKey(tourId), res.tour),
+  );
+}
+
+export function useLinkInOrder(tourId: string) {
+  return useTourReplace(tourId, (input: LinkInOrderInput) =>
+    post<TourResult>(`/tours/${tourId}/link-in-order`, input),
+  );
+}
+
+export function useAutoLinkNearby(tourId: string) {
+  return useTourReplace(tourId, (neighbors: number) =>
+    post<TourResult>(`/tours/${tourId}/auto-link-nearby`, { neighbors }),
+  );
+}
+
+export function useSetFloorPlan(tourId: string) {
+  return useTourReplace(tourId, (file: File) => uploadFloorPlan(tourId, file));
+}
+
+export function useRemoveFloorPlan(tourId: string) {
+  return useTourReplace(tourId, () => del<{ tour: TourDTO }>(`/tours/${tourId}/floor-plan`));
 }

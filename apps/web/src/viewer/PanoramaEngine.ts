@@ -6,6 +6,7 @@ import {
   MIN_FOV,
   normalizeYaw,
   vectorToYawPitch,
+  type HotspotKind,
   yawPitchToVector,
   type View,
 } from '@btv/shared';
@@ -20,7 +21,7 @@ export interface StereoMarker {
   id: string;
   yaw: number;
   pitch: number;
-  kind: 'link' | 'info';
+  kind: HotspotKind;
 }
 
 export interface EngineOptions {
@@ -38,7 +39,8 @@ export interface EngineOptions {
 }
 
 const MAX_PITCH = 89;
-const CACHE_SIZE = 5;
+/** Current scene plus low- and full-resolution textures of a few linked scenes. */
+const CACHE_SIZE = 8;
 const GAZE_ANGLE = 5;
 const GAZE_MS = 1500;
 
@@ -253,17 +255,26 @@ export class PanoramaEngine {
   }
 
   /**
-   * Shows `placeholderUrl` immediately (if given), then swaps in `url` once loaded.
-   * Superseded loads are ignored, so rapid scene switching is safe.
+   * Shows the best thing available immediately — a cached lower-resolution `previewKey`, else
+   * `placeholderUrl` — then swaps in `url` once loaded. Superseded loads are ignored, so rapid
+   * scene switching is safe.
    */
-  async showImage(key: string, url: string, placeholderUrl?: string | null): Promise<void> {
+  async showImage(
+    key: string,
+    url: string,
+    placeholderUrl?: string | null,
+    previewKey?: string | null,
+  ): Promise<void> {
     const token = ++this.loadToken;
     const cached = this.textures.get(key);
     if (cached) {
       this.applyTexture(cached.texture, key);
       return;
     }
-    if (placeholderUrl) {
+    const preview = previewKey ? this.textures.get(previewKey) : undefined;
+    if (preview) {
+      this.applyTexture(preview.texture, previewKey!);
+    } else if (placeholderUrl) {
       this.loadTexture(`${key}:placeholder`, placeholderUrl)
         .then((t) => {
           if (token === this.loadToken && !this.textures.has(key)) this.applyTexture(t);
@@ -280,9 +291,21 @@ export class PanoramaEngine {
   }
 
   /** Warms the cache for a scene the user is likely to open next. */
-  preload(key: string, url: string): void {
-    if (this.textures.has(key) || this.loading.has(key)) return;
-    this.loadTexture(key, url).catch(() => undefined);
+  preload(key: string, url: string): Promise<void> {
+    if (this.textures.has(key)) return Promise.resolve();
+    return this.loadTexture(key, url).then(
+      () => undefined,
+      () => undefined,
+    );
+  }
+
+  /** Resolves once the texture is decoded and cached; rejects if the image cannot load. */
+  async ensureTexture(key: string, url: string): Promise<void> {
+    await this.loadTexture(key, url);
+  }
+
+  hasTexture(key: string): boolean {
+    return this.textures.has(key);
   }
 
   /** Must be called from a user gesture (iOS permission prompt). */
@@ -616,7 +639,7 @@ export class PanoramaEngine {
   private updateGaze(now: number) {
     const view = { yaw: this.yaw, pitch: this.pitch };
     const target = this.markers.find(
-      (m) => m.kind === 'link' && angleBetween(view, m) < GAZE_ANGLE,
+      (m) => m.kind !== 'info' && angleBetween(view, m) < GAZE_ANGLE,
     );
     if (!target) {
       this.gaze = null;
@@ -648,7 +671,7 @@ function angleBetween(a: { yaw: number; pitch: number }, b: { yaw: number; pitch
 const markerTextures = new Map<string, THREE.Texture>();
 
 /** Simple procedurally drawn marker for VR mode (no image assets). */
-function markerTexture(kind: 'link' | 'info'): THREE.Texture {
+function markerTexture(kind: HotspotKind): THREE.Texture {
   const cached = markerTextures.get(kind);
   if (cached) return cached;
   const size = 128;
@@ -657,7 +680,7 @@ function markerTexture(kind: 'link' | 'info'): THREE.Texture {
   const ctx = canvas.getContext('2d')!;
   ctx.beginPath();
   ctx.arc(size / 2, size / 2, size / 2 - 8, 0, Math.PI * 2);
-  ctx.fillStyle = kind === 'link' ? 'rgba(14,165,233,0.85)' : 'rgba(245,158,11,0.9)';
+  ctx.fillStyle = kind === 'info' ? 'rgba(245,158,11,0.9)' : 'rgba(14,165,233,0.85)';
   ctx.fill();
   ctx.lineWidth = 8;
   ctx.strokeStyle = 'white';
@@ -666,7 +689,7 @@ function markerTexture(kind: 'link' | 'info'): THREE.Texture {
   ctx.font = 'bold 64px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(kind === 'link' ? '↑' : 'i', size / 2, size / 2 + 4);
+  ctx.fillText({ next: '↑', back: '↓', link: '→', info: 'i' }[kind], size / 2, size / 2 + 4);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   markerTextures.set(kind, texture);

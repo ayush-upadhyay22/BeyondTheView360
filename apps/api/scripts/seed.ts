@@ -1,6 +1,6 @@
 /**
  * Idempotent development seed: the demo user and an empty, unlisted demo tour.
- * Fill it with images via `npm run samples:upload`.
+ * Fill it with the five-room walk-through via `npm run samples:upload`.
  */
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';

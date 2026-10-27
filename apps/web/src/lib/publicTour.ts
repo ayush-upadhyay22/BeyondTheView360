@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import type { PublicTourDTO } from '@btv/shared';
+import { parseViewerParams, type PublicTourDTO } from '@btv/shared';
 import { BRAND } from '../config';
 import { get, post } from './api';
 
@@ -37,4 +38,19 @@ export function useDocumentTitle(title: string | undefined) {
       document.title = BRAND.name;
     };
   }, [title]);
+}
+
+/** Player props from `?scene=<id>&autoplay=1&ui=0` (unknown scene ids fall back to the start). */
+export function useViewerParams(tour: PublicTourDTO | undefined) {
+  const [search] = useSearchParams();
+  const params = useMemo(() => parseViewerParams(search), [search]);
+  const deepLinked =
+    !!params.sceneId && !!tour?.scenes.some((s) => s.id === params.sceneId) ? params.sceneId : null;
+  return {
+    ui: params.ui,
+    autoplay: params.autoplay,
+    startSceneId: deepLinked ?? tour?.startSceneId ?? null,
+    // The tour's start view belongs to its start scene; a deep-linked scene uses its own.
+    startView: deepLinked && deepLinked !== tour?.startSceneId ? null : (tour?.startView ?? null),
+  };
 }

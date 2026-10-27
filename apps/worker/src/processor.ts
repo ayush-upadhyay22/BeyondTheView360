@@ -2,7 +2,9 @@ import { UnrecoverableError, type Job } from 'bullmq';
 import { eq } from 'drizzle-orm';
 import {
   allSceneKeys,
+  detachFromChain,
   IMMUTABLE_CACHE,
+  lockTour,
   scenes,
   StorageNotFoundError,
   storageKeys,
@@ -142,6 +144,15 @@ export function createSceneProcessor(deps: ProcessorDeps) {
         )
         .where(eq(scenes.id, sceneId))
         .catch((dbErr: unknown) => log.error({ err: dbErr }, 'failed to record scene failure'));
+      if (permanent) {
+        // A rejected photo will never be shown: reconnect its neighbours so the walk continues.
+        await db
+          .transaction(async (tx) => {
+            await lockTour(tx, scene.tourId);
+            await detachFromChain(tx, sceneId, { bridge: true });
+          })
+          .catch((dbErr: unknown) => log.error({ err: dbErr }, 'failed to bridge walk-through'));
+      }
       // UnrecoverableError makes BullMQ fail the job immediately without retries.
       if (permanent) throw new UnrecoverableError((err as Error).message);
       throw err;

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { and, eq, ne } from 'drizzle-orm';
 import { updateHotspotSchema, uuidParamSchema } from '@btv/shared';
 import { hotspots, scenes } from '@btv/core';
-import { badRequest } from '../errors.js';
+import { badRequest, conflict } from '../errors.js';
 import { ah, currentUser, requireAuth } from '../middleware.js';
 import { loadOwnedHotspot } from '../services/access.js';
 import { hotspotToDTO } from '../services/dto.js';
@@ -21,9 +21,9 @@ export function hotspotsRouter(deps: AppDeps): Router {
       const input = parse(updateHotspotSchema, req.body);
       const { hotspot, scene } = await loadOwnedHotspot(db, id, currentUser(req).id);
 
-      if (hotspot.type === 'link') {
+      if (hotspot.kind !== 'info') {
         if (input.text !== undefined || input.imageUrl !== undefined) {
-          throw badRequest('Link hotspots have no text or image.');
+          throw badRequest('Arrows and link hotspots have no text or image.');
         }
         if (input.targetSceneId) {
           const [target] = await db
@@ -42,15 +42,23 @@ export function hotspotsRouter(deps: AppDeps): Router {
       } else if (input.targetSceneId !== undefined) {
         throw badRequest('Info hotspots cannot link to a scene.');
       }
-      if (hotspot.type === 'info' && input.title !== undefined && !input.title) {
+      if (hotspot.kind === 'info' && input.title !== undefined && !input.title) {
         throw badRequest('Info hotspots need a title.');
       }
 
-      const [updated] = await db
+      const updated = await db
         .update(hotspots)
         .set(input)
         .where(eq(hotspots.id, hotspot.id))
-        .returning();
+        .returning()
+        .then((rows) => rows[0])
+        .catch((err: unknown) => {
+          // Retargeting a next/back arrow onto a scene that already has one.
+          if ((err as { code?: string }).code === '23505') {
+            throw conflict('duplicate_arrow', 'This scene already has that arrow.');
+          }
+          throw err;
+        });
       res.json({ hotspot: hotspotToDTO(updated!) });
     }),
   );

@@ -66,6 +66,35 @@ export const ArrowUpIcon = (p: IconProps) => (
     <path d="M12 19V5M5 12l7-7 7 7" />
   </Icon>
 );
+export const ArrowDownIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M12 5v14M5 12l7 7 7-7" />
+  </Icon>
+);
+export const PlayIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M8 5.5v13l10-6.5z" fill="currentColor" />
+  </Icon>
+);
+export const StopIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" />
+  </Icon>
+);
+export const MapIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5V4l-6 2.5z" />
+    <path d="M9 4v13M15 6.5v13" />
+  </Icon>
+);
+export const ChainIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="5" cy="12" r="2" />
+    <circle cx="12" cy="12" r="2" />
+    <circle cx="19" cy="12" r="2" />
+    <path d="M7 12h3M14 12h3" />
+  </Icon>
+);
 export const InfoIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M12 11v6M12 7.5v.01" strokeWidth={2.4} />

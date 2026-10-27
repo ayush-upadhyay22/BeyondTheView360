@@ -95,7 +95,15 @@ function drawPanorama(variant: 'day' | 'dusk', width = 4096): string {
 export function createDemoScenes(): ViewerSceneDTO[] {
   const day = drawPanorama('day');
   const dusk = drawPanorama('dusk');
-  const base = { width: 4096, height: 2048, northOffset: 0, placeholder: null, startView: null };
+  const base = {
+    width: 4096,
+    height: 2048,
+    northOffset: 0,
+    placeholder: null,
+    startView: null,
+    mapX: null,
+    mapY: null,
+  };
   return [
     {
       ...base,
@@ -107,7 +115,7 @@ export function createDemoScenes(): ViewerSceneDTO[] {
         {
           id: 'demo-link-1',
           sceneId: 'demo-day',
-          type: 'link',
+          kind: 'next',
           yaw: 120,
           pitch: -10,
           title: 'Walk to dusk',
@@ -118,7 +126,7 @@ export function createDemoScenes(): ViewerSceneDTO[] {
         {
           id: 'demo-info-1',
           sceneId: 'demo-day',
-          type: 'info',
+          kind: 'info',
           yaw: 0,
           pitch: 20,
           title: 'This is north',
@@ -138,7 +146,7 @@ export function createDemoScenes(): ViewerSceneDTO[] {
         {
           id: 'demo-link-2',
           sceneId: 'demo-dusk',
-          type: 'link',
+          kind: 'back',
           yaw: -60,
           pitch: -10,
           title: 'Back to daylight',
