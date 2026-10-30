@@ -88,7 +88,7 @@ describe.skipIf(!integrationEnabled)('upload → S3 → queue → worker → rea
     expect(summary.thumbnailUrl).toBeTruthy();
   }, 90_000);
 
-  it('fails permanently with a readable message for a wrong aspect ratio', async () => {
+  it('accepts a 3:1 strip and letterboxes it to 2:1', async () => {
     const user = await newUser(stack.app);
     const tour = await createTour(user);
     const scene = await presignAndUpload(
@@ -100,13 +100,35 @@ describe.skipIf(!integrationEnabled)('upload → S3 → queue → worker → rea
     );
     await user.send('post', `/api/scenes/${scene.id}/complete`).expect(202);
 
+    const ready: SceneDTO = await waitForScene(
+      user.agent,
+      scene.id,
+      (s) => s === 'failed' || s === 'ready',
+    );
+    expect(ready.status).toBe('ready');
+    expect(ready.width).toBe(3000);
+    expect(ready.height).toBe(1500);
+  }, 60_000);
+
+  it('fails permanently for a portrait photo', async () => {
+    const user = await newUser(stack.app);
+    const tour = await createTour(user);
+    const scene = await presignAndUpload(
+      user,
+      tour.id,
+      await panorama(2000, 3000),
+      'image/jpeg',
+      'portrait.jpg',
+    );
+    await user.send('post', `/api/scenes/${scene.id}/complete`).expect(202);
+
     const failed: SceneDTO = await waitForScene(
       user.agent,
       scene.id,
       (s) => s === 'failed' || s === 'ready',
     );
     expect(failed.status).toBe('failed');
-    expect(failed.error).toMatch(/2:1/);
+    expect(failed.error).toMatch(/portrait/);
     expect(failed.variants).toEqual([]);
   }, 60_000);
 

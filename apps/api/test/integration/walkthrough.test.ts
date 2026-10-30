@@ -224,11 +224,11 @@ describe.skipIf(!integrationEnabled)('walk-through chain', () => {
   it('bridges the chain around a photo the worker rejects', async () => {
     const user = await newUser(stack.app);
     const tour = await createTour(user);
-    const strip = await panorama(4000, 1000);
+    const portrait = await panorama(2000, 3000);
     const ids: string[] = [];
     for (const [name, data] of [
       ['Hall', image],
-      ['Not a panorama', strip],
+      ['Not a panorama', portrait],
       ['Kitchen', image],
     ] as const) {
       const presign = await user.send('post', '/api/scenes/presign', {

@@ -34,19 +34,17 @@ describe('detectImageType (magic bytes)', () => {
 });
 
 describe('validatePanoramaDimensions', () => {
-  it('accepts 2:1 images at least 2048px wide', () => {
+  it('accepts 2:1 images, other landscapes, and small photos that will be upscaled', () => {
     expect(() => validatePanoramaDimensions({ width: 2048, height: 1024 })).not.toThrow();
-    expect(() => validatePanoramaDimensions({ width: 6000, height: 3100 })).not.toThrow(); // 1.94
-    expect(() => validatePanoramaDimensions({ width: 4200, height: 2000 })).not.toThrow(); // 2.1
+    expect(() => validatePanoramaDimensions({ width: 4000, height: 1000 })).not.toThrow(); // 4:1
+    expect(() => validatePanoramaDimensions({ width: 4000, height: 3000 })).not.toThrow(); // 4:3
+    expect(() => validatePanoramaDimensions({ width: 615, height: 325 })).not.toThrow();
   });
 
-  it('rejects wrong aspect ratios with a readable message', () => {
-    expect(() => validatePanoramaDimensions({ width: 4000, height: 1000 })).toThrow(PermanentError);
-    expect(() => validatePanoramaDimensions({ width: 4000, height: 3000 })).toThrow(/2:1/);
-  });
-
-  it('rejects panoramas narrower than 2048px', () => {
-    expect(() => validatePanoramaDimensions({ width: 1024, height: 512 })).toThrow(/too small/);
+  it('rejects portraits, thumbnails and extreme strips', () => {
+    expect(() => validatePanoramaDimensions({ width: 2000, height: 3000 })).toThrow(/portrait/);
+    expect(() => validatePanoramaDimensions({ width: 16, height: 8 })).toThrow(/too small/);
+    expect(() => validatePanoramaDimensions({ width: 30000, height: 1000 })).toThrow(/extremely wide/);
   });
 
   it('swaps dimensions for rotated EXIF orientations', () => {
@@ -108,11 +106,29 @@ describe('processPanorama', () => {
     }
   }, 30_000);
 
-  it('fails permanently for a wrong aspect ratio', async () => {
+  it('upscales a small landscape onto a 2048-wide canvas', async () => {
+    const input = await solid(615, 325).jpeg().toBuffer();
+    const out = await processPanorama(input, { maxInputPixels: MAX_PIXELS });
+    expect(out.width).toBe(2048);
+    expect(out.height).toBe(1024);
+    const meta = await sharp(out.variants.at(-1)!.data).metadata();
+    expect(meta.width).toBe(2048);
+    expect(meta.height).toBe(1024);
+  }, 30_000);
+
+  it('letterboxes a 4:1 strip onto a 2:1 canvas instead of rejecting it', async () => {
     const input = await solid(4000, 1000).jpeg().toBuffer();
-    await expect(processPanorama(input, { maxInputPixels: MAX_PIXELS })).rejects.toBeInstanceOf(
-      PermanentError,
-    );
+    const out = await processPanorama(input, { maxInputPixels: MAX_PIXELS });
+    expect(out.width).toBe(4000);
+    expect(out.height).toBe(2000);
+    const meta = await sharp(out.variants.at(-1)!.data).metadata();
+    expect(meta.width).toBe(2048);
+    expect(meta.height).toBe(1024);
+  }, 30_000);
+
+  it('fails permanently for a portrait photo', async () => {
+    const input = await solid(2000, 3000).jpeg().toBuffer();
+    await expect(processPanorama(input, { maxInputPixels: MAX_PIXELS })).rejects.toThrow(/portrait/);
   });
 
   it('fails permanently for non-images and truncated files', async () => {

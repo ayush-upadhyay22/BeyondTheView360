@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   angularDistance,
+  equirectCanvasSize,
   normalizeYaw,
   uvToYawPitch,
   vectorToYawPitch,
@@ -42,6 +43,13 @@ describe('geometry', () => {
     expect(uvToYawPitch(0.5, 0.5)).toEqual({ yaw: 0, pitch: 0 });
     expect(uvToYawPitch(0.75, 0).yaw).toBe(90);
     expect(uvToYawPitch(0.75, 0).pitch).toBe(90);
+  });
+
+  it('letterboxes any landscape onto a 2:1 canvas, upscaling small photos', () => {
+    expect(equirectCanvasSize(4096, 2048)).toEqual({ width: 4096, height: 2048 });
+    expect(equirectCanvasSize(4000, 1000)).toEqual({ width: 4000, height: 2000 });
+    expect(equirectCanvasSize(4000, 3000)).toEqual({ width: 6000, height: 3000 });
+    expect(equirectCanvasSize(615, 325)).toEqual({ width: 2048, height: 1024 });
   });
 
   it('measures angular distance', () => {

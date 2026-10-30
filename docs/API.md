@@ -106,10 +106,11 @@ form.append('file', file); // must be last
 await fetch(upload.url, { method: 'POST', body: form });
 ```
 
-The worker validates the real bytes (magic number, 2:1 ±5 % aspect ratio, ≥ 2048 px wide), strips
-all metadata including GPS, and writes WebP variants (1024/2048/4096/8192, never upscaled), a
-320 px JPEG thumbnail and a blurred placeholder. Invalid images end as `failed` with a readable
-`error`; transient failures are retried 3 times with exponential backoff first.
+The worker validates the real bytes (magic number, landscape between 1:1 and 24:1), letterboxes
+onto a 2:1 equirectangular canvas (upscaling below 2048 px), strips all metadata including GPS,
+and writes WebP variants (1024/2048/4096/8192, never larger than the letterbox canvas), a 320 px
+JPEG thumbnail and a blurred placeholder. Invalid images end as `failed` with a readable `error`;
+transient failures are retried 3 times with exponential backoff first.
 
 ## Hotspots (owner only)
 

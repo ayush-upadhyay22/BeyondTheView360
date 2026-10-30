@@ -24,7 +24,7 @@
     "db:migrate": "npm run db:migrate -w @btv/core",
     "db:seed": "npm run db:seed -w @btv/api",
     "samples:generate": "npm run samples:generate -w @btv/worker",
-    "samples:upload": "npm run samples:upload -w @btv/api",
+    "samples:upload": "npm run samples:upload -w @btv/api --",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

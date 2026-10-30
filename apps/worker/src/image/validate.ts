@@ -1,9 +1,4 @@
-import {
-  MAX_ASPECT_RATIO,
-  MIN_ASPECT_RATIO,
-  MIN_PANORAMA_WIDTH,
-  type AllowedUploadType,
-} from '@btv/shared';
+import { MAX_ASPECT_RATIO, MIN_ASPECT_RATIO, MIN_SOURCE_SIDE, type AllowedUploadType } from '@btv/shared';
 import { PermanentError } from '../errors.js';
 
 /** Identifies JPEG / PNG / WebP by their file signature, ignoring names and declared types. */
@@ -28,16 +23,22 @@ export function validatePanoramaDimensions({ width, height }: Dimensions): void 
   if (!width || !height) {
     throw new PermanentError('We could not read the image size. The file may be corrupted.');
   }
-  const ratio = width / height;
-  if (ratio < MIN_ASPECT_RATIO || ratio > MAX_ASPECT_RATIO) {
+  if (width < MIN_SOURCE_SIDE || height < MIN_SOURCE_SIDE) {
     throw new PermanentError(
-      `This doesn't look like a 360° photo: it is ${width}×${height} (ratio ${ratio.toFixed(2)}:1). ` +
-        'Equirectangular panoramas must be about twice as wide as they are tall (2:1).',
+      `This image is too small (${width}×${height}). Please upload a photo, not a thumbnail.`,
     );
   }
-  if (width < MIN_PANORAMA_WIDTH) {
+  const ratio = width / height;
+  if (ratio < MIN_ASPECT_RATIO) {
     throw new PermanentError(
-      `This panorama is too small (${width}px wide). Please upload one at least ${MIN_PANORAMA_WIDTH}px wide.`,
+      `This looks like a portrait photo (${width}×${height}). ` +
+        'Upload a landscape 360° image (wider than it is tall).',
+    );
+  }
+  if (ratio > MAX_ASPECT_RATIO) {
+    throw new PermanentError(
+      `This image is extremely wide (${width}×${height}, ratio ${ratio.toFixed(2)}:1). ` +
+        `Please export a panorama no more than ${MAX_ASPECT_RATIO}:1.`,
     );
   }
 }

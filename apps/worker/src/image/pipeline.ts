@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import { THUMBNAIL_WIDTH, variantWidthsFor } from '@btv/shared';
+import { equirectCanvasSize, THUMBNAIL_WIDTH, variantWidthsFor } from '@btv/shared';
 import { PermanentError } from '../errors.js';
 import { detectImageType, orientedDimensions, validatePanoramaDimensions } from './validate.js';
 
@@ -65,35 +65,42 @@ export async function processPanorama(
     throw new PermanentError('This image is too large to process. Please use a smaller file.');
   }
   validatePanoramaDimensions({ width, height });
+  const canvas = equirectCanvasSize(width, height);
   await report(15);
 
-  const widths = variantWidthsFor(width);
+  /** Letterbox onto 2:1 so a 4:1 phone pan or a 4:3 export is not stretched on the sphere. */
+  const toEquirect = (w: number, h: number) =>
+    input().resize({
+      width: w,
+      height: h,
+      fit: 'contain',
+      background: { r: 11, g: 18, b: 32 },
+      kernel: 'lanczos3',
+    });
+
+  const widths = variantWidthsFor(canvas.width);
   const variants: ProcessedPanorama['variants'] = [];
   try {
     for (const [i, w] of widths.entries()) {
-      const data = await input()
-        // Exact 2:1 output keeps texture mapping correct for slightly-off originals.
-        .resize({ width: w, height: w / 2, fit: 'fill', kernel: 'lanczos3' })
+      const data = await toEquirect(w, w / 2)
         .webp({ quality: w >= 4096 ? 80 : 82, effort: 4, smartSubsample: true })
         .toBuffer();
       variants.push({ width: w, data });
       await report(15 + ((i + 1) / widths.length) * 70);
     }
 
-    const thumbnail = await input()
-      .resize({ width: THUMBNAIL_WIDTH, height: THUMBNAIL_WIDTH / 2, fit: 'fill' })
+    const thumbnail = await toEquirect(THUMBNAIL_WIDTH, THUMBNAIL_WIDTH / 2)
       .jpeg({ quality: 75, mozjpeg: true })
       .toBuffer();
-    const placeholder = await input()
-      .resize({ width: 48, height: 24, fit: 'fill' })
+    const placeholder = await toEquirect(48, 24)
       .blur(1.2)
       .webp({ quality: 40 })
       .toBuffer();
     await report(95);
 
     return {
-      width,
-      height,
+      width: canvas.width,
+      height: canvas.height,
       variants,
       thumbnail,
       placeholder,

@@ -4,7 +4,8 @@
  * Each presign auto-links the new room to the previous one (next/back arrows). The first
  * ready scene becomes the tour start. Already-uploaded scene names are skipped.
  *
- *   npm run samples:upload            (API must be running: npm run dev)
+ *   npm run samples:upload                (API must be running: npm run dev)
+ *   npm run samples:upload -- --rebuild   (delete existing demo scenes first)
  *   API_URL=https://… npm run samples:upload
  */
 import { readdir, readFile } from 'node:fs/promises';
@@ -13,6 +14,8 @@ import { fileURLToPath } from 'node:url';
 import {
   CSRF_HEADER,
   CSRF_HEADER_VALUE,
+  FLOOR_PLAN_CONTENT_TYPE,
+  type FloorPlanPresignResponse,
   type PresignUploadResponse,
   type SceneDTO,
   type TourDTO,
@@ -90,7 +93,17 @@ async function waitForScene(id: string, timeoutMs = 180_000): Promise<SceneDTO> 
   }
 }
 
+function sceneNameFromFile(name: string) {
+  return name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ');
+}
+
+function isSceneSample(name: string) {
+  const base = name.toLowerCase();
+  return !base.startsWith('floor-plan') && !base.startsWith('invalid-');
+}
+
 async function main() {
+  const replace = process.argv.includes('--rebuild') || process.argv.includes('--replace');
   const files = (await readdir(samplesDir).catch(() => []))
     .filter((f) => TYPES[extname(f).toLowerCase()])
     .sort();
@@ -107,14 +120,31 @@ async function main() {
   const { tours } = await api<{ tours: TourSummaryDTO[] }>('GET', '/tours');
   const summary = tours.find((t) => t.shareId === DEMO.shareId) ?? tours[0];
   if (!summary) throw new Error('Demo tour not found. Run "npm run db:seed" first.');
-  const { tour: existing } = await api<{ tour: TourDTO }>('GET', `/tours/${summary.id}`);
-  const existingNames = new Set(existing.scenes.map((s) => s.name));
+  let { tour: existing } = await api<{ tour: TourDTO }>('GET', `/tours/${summary.id}`);
 
-  console.info(`Uploading ${files.length} file(s) to "${summary.title}" via ${API}\n`);
+  if (replace && existing.scenes.length) {
+    await api('PATCH', `/tours/${existing.id}`, { startSceneId: null });
+    console.info(`Replacing ${existing.scenes.length} existing scene(s)\n`);
+    for (const scene of [...existing.scenes].sort((a, b) => b.position - a.position)) {
+      await api('DELETE', `/scenes/${scene.id}?relink=1`);
+    }
+    ({ tour: existing } = await api<{ tour: TourDTO }>('GET', `/tours/${existing.id}`));
+  }
+
+  const existingNames = new Set(existing.scenes.map((s) => s.name));
+  const sceneFiles = files.filter(isSceneSample);
+  const rejectFiles = files.filter((f) => f.toLowerCase().startsWith('invalid-'));
+
+  await api('PATCH', `/tours/${existing.id}`, {
+    title: DEMO.tourTitle,
+    description: DEMO.tourDescription,
+  });
+
+  console.info(`Uploading ${sceneFiles.length + rejectFiles.length} file(s) to "${DEMO.tourTitle}" via ${API}\n`);
   const results: SceneDTO[] = [];
-  for (const name of files) {
+  for (const name of [...sceneFiles, ...rejectFiles]) {
     const type = TYPES[extname(name).toLowerCase()]!;
-    const sceneName = name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ');
+    const sceneName = sceneNameFromFile(name);
     if (existingNames.has(sceneName)) {
       console.info(`• ${name}: already in the tour, skipping`);
       continue;
@@ -142,7 +172,7 @@ async function main() {
     }
   }
 
-  const { tour } = await api<{ tour: TourDTO }>('GET', `/tours/${summary.id}`);
+  let { tour } = await api<{ tour: TourDTO }>('GET', `/tours/${summary.id}`);
   const ready = tour.scenes
     .filter((s) => s.status === 'ready')
     .sort((a, b) => a.position - b.position);
@@ -150,7 +180,7 @@ async function main() {
     const { result } = await api<{ result: { added: number; removed: number } }>(
       'POST',
       `/tours/${tour.id}/link-in-order`,
-      { mode: 'missing' },
+      { mode: 'rebuild' },
     );
     console.info(
       `\nWalk-through: ${ready.length} rooms in order${
@@ -158,8 +188,51 @@ async function main() {
       }.`,
     );
   }
-  if (ready[0] && !tour.startSceneId) {
-    await api('PATCH', `/tours/${tour.id}`, { startSceneId: ready[0].id });
+
+  const planFile = files.find((f) => f.toLowerCase().startsWith('floor-plan.') && f.endsWith('.webp'));
+  const pinFile = resolve(samplesDir, 'floor-plan.json');
+  if (planFile) {
+    const data = await readFile(resolve(samplesDir, planFile));
+    const meta = JSON.parse(await readFile(pinFile, 'utf8').catch(() => '{}')) as {
+      width?: number;
+      height?: number;
+      pins?: Record<string, { x: number; y: number }>;
+    };
+    console.info(`\n• ${planFile} (house plan)`);
+    const { key, upload } = await api<FloorPlanPresignResponse>(
+      'POST',
+      `/tours/${tour.id}/floor-plan/presign`,
+      { contentType: FLOOR_PLAN_CONTENT_TYPE, size: data.length },
+    );
+    await uploadToStorage(upload, data, FLOOR_PLAN_CONTENT_TYPE);
+    ({ tour } = await api<{ tour: TourDTO }>('POST', `/tours/${tour.id}/floor-plan/complete`, {
+      key,
+      width: meta.width ?? 1600,
+      height: meta.height ?? 1100,
+    }));
+    console.info('    ✓ floor plan attached');
+    for (const scene of tour.scenes) {
+      const pin = meta.pins?.[scene.name];
+      if (!pin) continue;
+      await api('PATCH', `/scenes/${scene.id}`, { mapX: pin.x, mapY: pin.y, northOffset: 0 });
+      console.info(`    ✓ pinned ${scene.name}`);
+    }
+    if (tour.scenes.filter((s) => s.status === 'ready').length >= 2) {
+      const { result } = await api<{ result: { added: number } }>(
+        'POST',
+        `/tours/${tour.id}/auto-link-nearby`,
+        { neighbors: 2 },
+      );
+      console.info(
+        `    ✓ auto-linked nearby rooms${result.added ? ` (+${result.added} arrows)` : ''}`,
+      );
+    }
+  }
+
+  ({ tour } = await api<{ tour: TourDTO }>('GET', `/tours/${tour.id}`));
+  const start = tour.scenes.find((s) => s.name === '01 hall') ?? ready[0];
+  if (start) {
+    await api('PATCH', `/tours/${tour.id}`, { startSceneId: start.id });
   }
 
   const failed = results.filter((r) => r.status === 'failed').length;

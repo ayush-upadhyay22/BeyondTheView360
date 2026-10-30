@@ -137,7 +137,7 @@ export function Uploader({
           </button>
         </p>
         <p className="mt-1 text-xs text-slate-500">
-          Equirectangular 2:1 · JPEG, PNG or WebP · up to {formatBytes(maxBytes)}
+          Landscape 360° · JPEG, PNG or WebP · up to {formatBytes(maxBytes)}
         </p>
         <p className="mt-1 text-xs text-slate-500">
           Rooms are linked in the order you add them, e.g. 01-hall, 02-kitchen.

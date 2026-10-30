@@ -1,3 +1,5 @@
+import { MIN_PANORAMA_WIDTH, TARGET_ASPECT_RATIO } from './constants.js';
+
 /**
  * View coordinates used across the platform:
  * - yaw:   degrees in [-180, 180]; 0 = horizontal centre of the equirectangular image,
@@ -34,6 +36,18 @@ export function vectorToYawPitch(x: number, y: number, z: number): { yaw: number
     yaw: normalizeYaw(Math.atan2(x, -z) / DEG),
     pitch: clamp(Math.asin(clamp(y / len, -1, 1)) / DEG, -90, 90),
   };
+}
+
+/**
+ * 2:1 canvas that can hold `width`×`height` without stretching: extra space is letterboxed.
+ * Wide strips grow in height; tall landscapes grow in width. Small photos are upscaled so the
+ * sphere always has at least MIN_PANORAMA_WIDTH texels.
+ */
+export function equirectCanvasSize(width: number, height: number): { width: number; height: number } {
+  const raw = width >= height * TARGET_ASPECT_RATIO ? width : height * TARGET_ASPECT_RATIO;
+  const canvasWidth = Math.max(raw, MIN_PANORAMA_WIDTH);
+  const even = canvasWidth + (canvasWidth % 2);
+  return { width: even, height: even / 2 };
 }
 
 /** Maps equirectangular texture coordinates (u right, v down, both 0..1) to yaw/pitch. */

@@ -27,8 +27,14 @@ export type AllowedUploadType = (typeof ALLOWED_UPLOAD_TYPES)[number];
 export const VARIANT_WIDTHS = [1024, 2048, 4096, 8192] as const;
 export const THUMBNAIL_WIDTH = 320;
 export const MIN_PANORAMA_WIDTH = 2048;
-export const MIN_ASPECT_RATIO = 1.9;
-export const MAX_ASPECT_RATIO = 2.1;
+/** Icons and truncated files below this on either side are rejected. */
+export const MIN_SOURCE_SIDE = 32;
+/** Must be at least as wide as it is tall (portraits are rejected). */
+export const MIN_ASPECT_RATIO = 1;
+/** Long phone pans (often 10–20:1) are accepted and letterboxed to 2:1. */
+export const MAX_ASPECT_RATIO = 24;
+/** Sphere mapping is always a 2:1 equirectangular canvas. */
+export const TARGET_ASPECT_RATIO = 2;
 
 export const MAX_HOTSPOTS_PER_SCENE = 50;
 

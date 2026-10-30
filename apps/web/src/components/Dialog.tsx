@@ -30,7 +30,7 @@ export function Dialog({
       onClose={onClose}
       onClick={(e) => e.target === ref.current && onClose()}
       aria-labelledby="dialog-title"
-      className={`w-[calc(100%-2rem)] ${wide ? 'max-w-2xl' : 'max-w-lg'} rounded-2xl border border-ink-600 bg-ink-900 p-0 text-slate-100 shadow-2xl backdrop:bg-black/70 backdrop:backdrop-blur-sm`}
+      className={`max-h-[min(92vh,56rem)] w-[calc(100%-2rem)] ${wide ? 'max-w-3xl' : 'max-w-lg'} overflow-y-auto rounded-2xl border border-ink-600 bg-ink-900 p-0 text-slate-100 shadow-2xl backdrop:bg-black/70 backdrop:backdrop-blur-sm`}
     >
       {open && (
         <div className="p-6">

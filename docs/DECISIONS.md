@@ -143,7 +143,7 @@ after `PENDING_UPLOAD_TTL_HOURS`. Multiple workers sweeping concurrently is safe
 **D28. Image pipeline.** Magic bytes are checked first (JPEG/PNG/WebP only; the declared
 `Content-Type` is not trusted), then sharp metadata must agree with the detected format. EXIF
 orientation is applied before validation and baked into pixels. Variants are produced from the
-original for each width ≤ original (resized to exactly 2:1), as WebP; plus a 320×160 mozjpeg
+original for each width ≤ the 2:1 letterbox canvas (fit: contain, dark bars, never stretched), as WebP; plus a 320×160 mozjpeg
 thumbnail and a 48×24 blurred WebP placeholder (stored in S3 and inlined in the DB as a data URL
 for instant display). sharp drops all metadata (EXIF, GPS, XMP) by default; a unit test asserts
 it. `limitInputPixels` guards against decompression bombs. `sharp.concurrency` is divided by the
@@ -258,11 +258,10 @@ the viewer is always anonymous — private tours therefore cannot be embedded, w
 ## Phase 8 — Samples, seed, docs
 
 **D48. Synthetic samples rendered locally.** `samples:generate` draws original equirectangular
-scenes (courtyard, gallery, rooftop) as SVG and rasterises them with sharp, so no images are
+rooms plus a labelled house plan as SVG and rasterises them with sharp, so no images are
 downloaded or copied and the command works offline. One sample per format (JPEG, PNG, WebP)
-exercises every decoder; a 4:1 `invalid-wide-strip.jpg` exercises the rejection path. Compass
-labels put north at yaw 0 so orientation bugs are visible. Output goes to the git-ignored
-`samples/` folder.
+exercises every decoder; a portrait `invalid-portrait.jpg` exercises the rejection path. Compass
+N sits at yaw 0 so orientation bugs are visible. Output goes to the git-ignored `samples/` folder.
 
 **D49. Seed is idempotent and refuses production.** `db:seed` upserts `demo@example.com`
 (password documented in the README, overridable via `DEMO_PASSWORD`) and an unlisted demo tour
@@ -271,9 +270,9 @@ with the fixed share id `demo-tour-360`, so the demo URL is stable across resets
 
 **D50. `samples:upload` uses the real public API.** It logs in, presigns, POSTs each file to
 storage, calls `/complete` and polls exactly like the browser, so it doubles as an end-to-end
-smoke test. Already-uploaded scene names are skipped (safe to rerun). Ready scenes are linked in a
-ring (forward at yaw 0, back at yaw 180) with one info hotspot each, and the first becomes the
-start scene.
+smoke test. Already-uploaded scene names are skipped (safe to rerun); `--rebuild` deletes
+existing demo scenes first. Ready rooms are chained in upload order, pinned from
+`floor-plan.json`, auto-linked to nearby neighbours, and the hall becomes the start scene.
 
 **D51. Out-of-scope features are marked in code.** Payments, custom domains, floor plans, AI
 enhancement, mobile app and extra storage drivers each have an `EXTENSION POINT` comment where

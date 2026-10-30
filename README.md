@@ -139,15 +139,17 @@ Share and embed query params (also available as checkboxes in the share dialog):
 | `?autoplay=1` | Start the guided walk as soon as the first room is visible |
 | `?ui=0`       | Hide every control (kiosk / background embeds)             |
 
-Images must be **2:1 equirectangular** panoramas, at least 2048 px wide (JPEG, PNG or WebP).
-A 4:1 phone panorama will be rejected with a readable error.
+Images should be **landscape 360°** photos (JPEG, PNG or WebP). True 2:1 equirectangular is
+ideal; other landscapes from 1:1 to 24:1 — including phone pans — are letterboxed onto a 2:1
+canvas. Small photos are upscaled to 2048 px wide. Portraits are rejected.
 
 ## Testing with images
 
-- `npm run samples:generate` writes five original synthetic rooms (hall → kitchen → living →
-  bedroom → garden) and one **invalid** 4:1 image that the worker must reject with a readable
-  error. Add `-- --width 8192` for 8K images.
-- Drop your own **2:1 equirectangular** photos (≥ 2048 px wide) into [`samples/`](samples/) and run
+- `npm run samples:generate` writes five original rooms (hall → kitchen → living → bedroom →
+  garden), a Willow House floor plan, and one **invalid** portrait that the worker must reject.
+  `npm run samples:upload -- --rebuild` rebuilds the demo tour, pins every room, and auto-links
+  neighbours. Add `-- --width 8192` when generating for 8K images.
+- Drop your own landscape 360° photos into [`samples/`](samples/) and run
   `npm run samples:upload`, or drag them into the editor.
 - Phone cameras and most 360° cameras (Ricoh Theta, Insta360, GoPro Max) export equirectangular
   JPEGs that work as-is. EXIF/GPS metadata is stripped during processing.
@@ -265,7 +267,7 @@ All endpoints are under `/api`; see [`docs/API.md`](docs/API.md) for bodies, res
 | `db:migrate` cannot connect                   | Docker is not running or Postgres is still starting; rerun `npm run docker:up` (it waits for health checks).                                                                                    |
 | Upload fails with a CORS error                | The bucket CORS rules were not applied: rerun `docker compose run --rm minio-init`. For other web origins add them to `docker/minio-cors.json` and set `MINIO_CORS_ORIGINS` before `docker:up`. |
 | Scenes stay "Queued"                          | The worker is not running (`npm run dev` starts it) or `QUEUE_PREFIX`/`REDIS_URL` differ between API and worker.                                                                                |
-| Scene "Failed" with a ratio/size message      | The image is not a 2:1 equirectangular panorama ≥ 2048 px wide. That is expected for `invalid-wide-strip.jpg`.                                                                                  |
+| Scene "Failed" with a ratio/size message      | Portraits and strips wider than 24:1 are rejected. That is expected for `invalid-portrait.jpg`. Small landscapes are upscaled, not rejected.                                                |
 | Images don't load in the viewer (403/expired) | Clock skew or a wrong `S3_PUBLIC_ENDPOINT`; browsers must reach the same host the URL was signed for.                                                                                           |
 | Rooms uploaded in the wrong order             | File pickers often sort alphabetically. Prefix files `01-hall.jpg`, `02-kitchen.jpg`… or use **Re-link in order** after dragging the scene list.                                                |
 | `samples:upload`: "Cannot reach the API"      | Start `npm run dev` first; run `npm run db:seed` if login fails.                                                                                                                                |
