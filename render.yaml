@@ -1,0 +1,37 @@
+# Free one-process host: API + website + inline worker. Signup: https://dashboard.render.com
+# Blueprint: New → Blueprint → this repo. Web service sleeps after 15 minutes idle.
+services:
+  - type: web
+    name: beyond-the-view-360
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: node apps/api/dist/host.js
+    healthCheckPath: /api/healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: '1'
+      - key: COOKIE_SECURE
+        value: 'true'
+      - key: QUEUE_DRIVER
+        value: inline
+      - key: STORAGE_DRIVER
+        value: database
+      - key: STORAGE_SECRET
+        generateValue: true
+      - key: MIGRATE_ON_START
+        value: '1'
+      - key: MAX_INPUT_PIXELS
+        value: '16777216'
+      - key: DATABASE_URL
+        fromDatabase:
+          name: beyond-the-view-360
+          property: connectionString
+
+databases:
+  - name: beyond-the-view-360
+    plan: free
+    databaseName: btv
+    user: btv

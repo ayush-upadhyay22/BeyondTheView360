@@ -1,4 +1,6 @@
-import express, { Router, type Express } from 'express';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import express, { Router, type Express, type RequestHandler } from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -7,7 +9,9 @@ import { randomUUID } from 'node:crypto';
 import { CSRF_HEADER } from '@btv/shared';
 import { errorBody, errorHandler } from './errors.js';
 import { ah, csrfProtection, sessionMiddleware } from './middleware.js';
+import { DatabaseStorageDriver } from '@btv/core';
 import { authRouter } from './routes/auth.js';
+import { databaseStorageRouter } from './routes/database-storage.js';
 import { hotspotsRouter } from './routes/hotspots.js';
 import { publicRouter } from './routes/public.js';
 import { scenesRouter } from './routes/scenes.js';
@@ -44,21 +48,24 @@ export function createApp(deps: AppDeps): Express {
     }),
   );
 
-  // JSON API: nothing here should ever render as a document or be framed.
-  app.use(
-    helmet({
-      contentSecurityPolicy: {
-        useDefaults: false,
-        directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] },
-      },
-      crossOriginResourcePolicy: { policy: 'same-site' },
-    }),
-  );
+  const api = Router();
+  const apiHelmet = helmet({
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] },
+    },
+    crossOriginResourcePolicy: { policy: 'same-site' },
+  });
+  // SPA pages need a real document CSP; keep the locked-down policy on /api only then.
+  if (deps.spa) api.use(apiHelmet);
+  else app.use(apiHelmet);
 
   const allowedOrigins = new Set(config.CORS_ORIGINS);
+  if (deps.spa) allowedOrigins.add(config.WEB_ORIGIN);
   app.use(
     cors({
-      origin: (origin, cb) => cb(null, !origin || allowedOrigins.has(origin)),
+      origin: (origin, cb) =>
+        cb(null, !origin || allowedOrigins.has(origin) || Boolean(deps.spa)),
       credentials: true,
       methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
       allowedHeaders: ['content-type', CSRF_HEADER],
@@ -68,8 +75,6 @@ export function createApp(deps: AppDeps): Express {
 
   app.use(express.json({ limit: config.JSON_BODY_LIMIT }));
   app.use(cookieParser());
-
-  const api = Router();
 
   api.get('/healthz', (_req, res) => {
     res.json({ ok: true });
@@ -89,6 +94,12 @@ export function createApp(deps: AppDeps): Express {
   );
 
   api.use(deps.limiters.api);
+
+  // Same contract as S3 presign: the browser POSTs the file without the CSRF header.
+  if (deps.storage.name === 'database') {
+    api.use(databaseStorageRouter(deps.storage as DatabaseStorageDriver));
+  }
+
   api.use(sessionMiddleware(deps.db));
   api.use(csrfProtection(config));
 
@@ -103,10 +114,64 @@ export function createApp(deps: AppDeps): Express {
   });
 
   app.use('/api', api);
-  app.use((_req, res) => {
-    res.status(404).json(errorBody('not_found', 'Not found.'));
-  });
+
+  if (deps.spa) {
+    mountSpa(app, deps.spa);
+  } else {
+    app.use((_req, res) => {
+      res.status(404).json(errorBody('not_found', 'Not found.'));
+    });
+  }
   app.use(errorHandler(logger));
 
   return app;
+}
+
+function spaHeaders(frameAncestors: string[], mediaOrigins: string[], embeddable: boolean): RequestHandler {
+  return helmet({
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https:', ...mediaOrigins],
+        connectSrc: ["'self'", ...mediaOrigins],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors,
+        upgradeInsecureRequests: null,
+      },
+    },
+    frameguard: embeddable ? false : { action: 'sameorigin' },
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  });
+}
+
+function mountSpa(app: Express, spa: NonNullable<AppDeps['spa']>): void {
+  const indexHtml = resolve(spa.dir, 'index.html');
+  if (!existsSync(indexHtml)) {
+    throw new Error(`SPA build not found at ${indexHtml}. Run "npm run build -w @btv/web" first.`);
+  }
+  const mediaOrigins = spa.mediaOrigins ?? [];
+  const embedAncestors = spa.embedAncestors ?? ['*'];
+  const embedHeaders = spaHeaders(embedAncestors, mediaOrigins, true);
+  const appHeaders = spaHeaders(["'self'"], mediaOrigins, false);
+
+  app.use(
+    '/assets',
+    express.static(resolve(spa.dir, 'assets'), { immutable: true, maxAge: '1y', index: false }),
+  );
+  app.use(express.static(spa.dir, { index: false, maxAge: '1h' }));
+  app.get('/{*path}', (req, res, next) => {
+    const headers = req.path.startsWith('/embed/') ? embedHeaders : appHeaders;
+    headers(req, res, () => {
+      res.setHeader('Cache-Control', 'no-cache');
+      res.sendFile(indexHtml, (err) => err && next(err));
+    });
+  });
 }

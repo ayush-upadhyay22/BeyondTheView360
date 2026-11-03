@@ -1,0 +1,15 @@
+# One-process free host (Northflank / similar): API + web + inline worker.
+[variables]
+NIXPACKS_NODE_VERSION = "20"
+
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "node apps/api/dist/host.js"

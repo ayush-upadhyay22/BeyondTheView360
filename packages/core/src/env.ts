@@ -47,12 +47,12 @@ export const baseEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   DATABASE_URL: z.string().url(),
-  REDIS_URL: z.string().url(),
+  REDIS_URL: envOptionalUrl,
 });
 
 export const storageEnvSchema = z.object({
-  STORAGE_DRIVER: z.enum(['s3']).default('s3'),
-  S3_BUCKET: z.string().min(3),
+  STORAGE_DRIVER: z.enum(['s3', 'database']).default('s3'),
+  S3_BUCKET: z.preprocess(emptyToUndefined, z.string().min(3).optional()),
   S3_REGION: z.string().min(1).default('us-east-1'),
   S3_ENDPOINT: envOptionalUrl,
   S3_PUBLIC_ENDPOINT: envOptionalUrl,
@@ -61,9 +61,25 @@ export const storageEnvSchema = z.object({
   S3_SECRET_ACCESS_KEY: envOptionalString,
   PUBLIC_BASE_URL: envOptionalUrl,
   SIGNED_URL_TTL_SECONDS: envInt(3600, 60, 7 * 24 * 3600),
+  /** HMAC secret for database-driver upload tokens. Required when STORAGE_DRIVER=database. */
+  STORAGE_SECRET: envOptionalString,
 });
 
+/** Call after parsing a schema that includes `storageEnvSchema`. */
+export function assertStorageEnv(env: z.infer<typeof storageEnvSchema>): void {
+  if (env.STORAGE_DRIVER === 's3' && !env.S3_BUCKET) {
+    throw new Error('Invalid environment configuration:\n  - S3_BUCKET: Required when STORAGE_DRIVER=s3');
+  }
+  if (env.STORAGE_DRIVER === 'database' && !env.STORAGE_SECRET) {
+    throw new Error(
+      'Invalid environment configuration:\n  - STORAGE_SECRET: Required when STORAGE_DRIVER=database',
+    );
+  }
+}
+
 export const queueEnvSchema = z.object({
+  /** `inline` processes panoramas inside the API (free one-process host; no Redis). */
+  QUEUE_DRIVER: z.enum(['redis', 'inline']).default('redis'),
   JOB_ATTEMPTS: envInt(3, 1, 20),
   JOB_BACKOFF_MS: envInt(5000, 100, 10 * 60_000),
   /** Redis key prefix for BullMQ; lets several environments share one Redis. */
@@ -72,6 +88,18 @@ export const queueEnvSchema = z.object({
     .regex(/^[a-z0-9_-]{1,40}$/i)
     .default('btv'),
 });
+
+/** Call after parsing a schema that includes `queueEnvSchema`. */
+export function assertQueueEnv(env: {
+  QUEUE_DRIVER: 'redis' | 'inline';
+  REDIS_URL?: string;
+}): void {
+  if (env.QUEUE_DRIVER === 'redis' && !env.REDIS_URL) {
+    throw new Error(
+      'Invalid environment configuration:\n  - REDIS_URL: Required when QUEUE_DRIVER=redis',
+    );
+  }
+}
 
 /** Parses env with a zod schema and throws one readable error listing every problem. */
 export function parseEnv<T extends z.ZodTypeAny>(

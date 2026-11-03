@@ -12,4 +12,6 @@ export interface AppDeps {
   limiters: RateLimiters;
   /** Readiness probes for external services. */
   checks: Record<string, () => Promise<unknown>>;
+  /** When set, non-API routes serve the built SPA (one-process free host). */
+  spa?: { dir: string; mediaOrigins?: string[]; embedAncestors?: string[] };
 }

@@ -2,6 +2,7 @@ import {
   type AnyPgColumn,
   bigint,
   check,
+  customType,
   date,
   index,
   integer,
@@ -17,6 +18,18 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { HOTSPOT_KINDS, SCENE_STATUSES, TOUR_VISIBILITIES, type View } from '@btv/shared';
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return 'bytea';
+  },
+  toDriver(value) {
+    return value;
+  },
+  fromDriver(value) {
+    return Buffer.isBuffer(value) ? value : Buffer.from(value as Uint8Array);
+  },
+});
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -170,6 +183,14 @@ export const tourViewsDaily = pgTable(
   },
   (t) => [primaryKey({ columns: [t.tourId, t.day] })],
 );
+
+/** Image blobs when STORAGE_DRIVER=database (no S3 / MinIO). */
+export const storedObjects = pgTable('stored_objects', {
+  key: text('key').primaryKey(),
+  contentType: text('content_type').notNull(),
+  body: bytea('body').notNull(),
+  ...timestamps,
+});
 
 export type UserRow = typeof users.$inferSelect;
 export type SessionRow = typeof sessions.$inferSelect;

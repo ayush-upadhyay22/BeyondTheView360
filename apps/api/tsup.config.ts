@@ -8,7 +8,7 @@ const depsOf = (path: string) =>
   );
 
 export default defineConfig({
-  entry: ['src/server.ts'],
+  entry: ['src/server.ts', 'src/host.ts'],
   format: ['esm'],
   platform: 'node',
   target: 'node20',
@@ -20,5 +20,6 @@ export default defineConfig({
   external: [
     ...depsOf('../../packages/core/package.json'),
     ...depsOf('../../packages/shared/package.json'),
+    ...depsOf('../../apps/worker/package.json'),
   ].filter((d) => !d.startsWith('@btv/')),
 });

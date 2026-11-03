@@ -81,8 +81,8 @@ point in `apps/api/src/middleware.ts`.
 **D16. Storage interface.** `StorageDriver` (`packages/core/src/storage/types.ts`) exposes
 `put`, `get`, `head`, `delete`, `presignUpload` and `publicUrl`. `head` was added to the five
 required methods because `/scenes/:id/complete` must verify the object exists without downloading
-it. Drivers: `s3` (production; MinIO and AWS differ only by env vars) and `memory` (tests). New
-drivers register in `createStorage` — the marked extension point.
+it. Drivers: `s3` (MinIO, AWS, or any S3 API), `database` (blobs in Postgres when there is no
+object store yet), and `memory` (tests). New drivers register in `createStorage`.
 
 **D17. Presigned POST, not presigned PUT.** Only POST policies can enforce
 `content-length-range` server-side, so oversized uploads are rejected by S3 itself. The policy also
@@ -115,6 +115,16 @@ block the user. Orphans are harmless because keys are never reused.
 S3-compatible stores (including the pinned MinIO release), which recent AWS SDKs no longer send.
 The S3 driver therefore issues `DeleteObject` calls with bounded concurrency (8). Scenes have
 fewer than ten objects, so the cost is negligible.
+
+**D23a. Database storage for hosts without S3.** `STORAGE_DRIVER=database` writes originals and
+processed variants into `stored_objects` (bytea). The browser still POSTs a presigned form, but
+the URL is `/api/storage/upload` (HMAC token, no CSRF header — same as S3). Images are served at
+`/api/media/…` on the API origin. This is for a single-VM deploy (Oracle, etc.); large panoramas
+will grow the database. Switch to S3 later by changing the env and leaving the table unused.
+
+**D23b. One-process free host.** `apps/api/src/host.ts` serves the API and the built SPA and
+runs the panorama processor in-process (`QUEUE_DRIVER=inline`). That fits a free Northflank
+Sandbox service plus its one Postgres addon. Not for scale: one Sharp job at a time, no Redis.
 
 ## Phase 4 — Queue, worker & image pipeline
 

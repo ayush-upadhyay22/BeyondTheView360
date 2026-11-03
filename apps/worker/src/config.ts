@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import { baseEnvSchema, envInt, parseEnv, queueEnvSchema, storageEnvSchema } from '@btv/core';
+import { assertStorageEnv, baseEnvSchema, envInt, parseEnv, queueEnvSchema, storageEnvSchema } from '@btv/core';
 
 export const workerEnvSchema = baseEnvSchema
   .merge(storageEnvSchema)
@@ -12,8 +12,15 @@ export const workerEnvSchema = baseEnvSchema
     PENDING_UPLOAD_TTL_HOURS: envInt(24, 1, 24 * 30),
   });
 
-export type WorkerConfig = z.infer<typeof workerEnvSchema>;
+export type WorkerConfig = z.infer<typeof workerEnvSchema> & { REDIS_URL: string };
 
 export function loadWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
-  return parseEnv(workerEnvSchema, env);
+  const parsed = parseEnv(workerEnvSchema, env);
+  assertStorageEnv(parsed);
+  if (!parsed.REDIS_URL) {
+    throw new Error(
+      'Invalid environment configuration:\n  - REDIS_URL: Required for the standalone worker',
+    );
+  }
+  return { ...parsed, REDIS_URL: parsed.REDIS_URL };
 }

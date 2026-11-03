@@ -22,8 +22,8 @@ const logger = createLogger({
 });
 
 const dbHandle = createDb(config.DATABASE_URL);
-const storage = createStorage(config);
-const queue = createSceneQueue(config.REDIS_URL, {
+const storage = createStorage(config, { db: dbHandle.db });
+const queue = createSceneQueue(config.REDIS_URL!, {
   attempts: config.JOB_ATTEMPTS,
   backoffMs: config.JOB_BACKOFF_MS,
   prefix: config.QUEUE_PREFIX,

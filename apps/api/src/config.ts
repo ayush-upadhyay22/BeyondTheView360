@@ -4,6 +4,8 @@ import {
   envBool,
   envInt,
   envOptionalString,
+  assertQueueEnv,
+  assertStorageEnv,
   parseEnv,
   queueEnvSchema,
   storageEnvSchema,
@@ -47,6 +49,8 @@ export interface ApiConfig extends ApiEnv {
 
 export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
   const parsed = parseEnv(apiEnvSchema, env);
+  assertStorageEnv(parsed);
+  assertQueueEnv(parsed);
   const cookieSecure =
     parsed.COOKIE_SECURE === undefined
       ? parsed.NODE_ENV === 'production'

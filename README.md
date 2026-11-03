@@ -14,9 +14,9 @@ tour as a share link or an `<iframe>` embed.
   progressive loading (blurred placeholder → right-sized variant → optional 8K), keyboard control.
 - **Sharing** — private / unlisted / public tours, `/t/:id` public pages, `/embed/:id` for other
   sites, privacy-friendly view counts.
-- **Pipeline** — browser uploads straight to S3 via presigned POST; a BullMQ worker validates,
-  strips EXIF/GPS and renders WebP variants with sharp, with retries, a dead-letter queue and
-  stuck-job recovery.
+- **Pipeline** — browser uploads via presigned POST (S3/MinIO, or the API when images live in
+  Postgres); a BullMQ worker validates, strips EXIF/GPS and renders WebP variants with sharp,
+  with retries, a dead-letter queue and stuck-job recovery.
 
 ---
 
@@ -68,7 +68,7 @@ Design decisions and their reasoning are recorded in [`docs/DECISIONS.md`](docs/
 | Data       | PostgreSQL 16 with Drizzle ORM + SQL migrations                                                   |
 | Jobs       | BullMQ on Redis 7                                                                                 |
 | Images     | sharp (libvips) in the worker                                                                     |
-| Storage    | `StorageDriver` interface with an `s3` driver (MinIO locally, AWS S3 in production)               |
+| Storage    | `StorageDriver` (`s3` for MinIO/AWS, or `database` to keep blobs in Postgres)                    |
 | Auth       | email + password (argon2id), server-side sessions in httpOnly cookies, CSRF header + origin check |
 | Tests / CI | Vitest (unit + integration), GitHub Actions                                                       |
 
@@ -174,7 +174,9 @@ development). Production must provide real values via the environment.
 | `COOKIE_SECURE`                             | api                  | `false` (`true` in prod)  | `Secure` flag on the session cookie                                                       |
 | `JSON_BODY_LIMIT`                           | api                  | `100kb`                   | Max JSON body size                                                                        |
 | `RATE_LIMIT_ENABLED`                        | api                  | `true`                    | Disable only for tests                                                                    |
-| `STORAGE_DRIVER`                            | api, worker          | `s3`                      | Storage driver (`s3`; tests inject an in-memory driver)                                   |
+| `STORAGE_DRIVER`                            | api, worker          | `s3`                      | `s3` or `database` (keep images in Postgres; no MinIO/S3 needed)                          |
+| `STORAGE_SECRET`                            | api, worker          | —                         | HMAC secret for database-driver uploads; required when `STORAGE_DRIVER=database`          |
+| `QUEUE_DRIVER`                              | api                  | `redis`                   | `inline` processes panoramas inside the API (free one-process host; no Redis)             |
 | `S3_BUCKET`                                 | api, worker          | `btv-media`               | Bucket name (private)                                                                     |
 | `S3_REGION`                                 | api, worker          | `us-east-1`               | Region                                                                                    |
 | `S3_ENDPOINT`                               | api, worker          | `http://localhost:9000`   | Custom endpoint (MinIO); **empty for AWS S3**                                             |
@@ -277,6 +279,25 @@ All endpoints are under `/api`; see [`docs/API.md`](docs/API.md) for bodies, res
 
 ## Deploying to production
 
+### Host for free (Render)
+
+Northflank signup is often closed. Use [Render](https://dashboard.render.com) instead
+(GitHub login, no card). The app runs as **one process**: API + website + image worker.
+Images stay in Postgres. No Redis, no S3.
+
+1. Push this repo to GitHub.
+2. On Render: **New → Blueprint** → pick the repo (`render.yaml` is already in the root).
+3. Apply the Blueprint. It creates a free web service and a free Postgres.
+4. Open `https://beyond-the-view-360.onrender.com` (or the URL Render shows), sign up,
+   create a tour. `/api/healthz` should return `{"ok":true}`.
+
+The free web service **sleeps after 15 minutes idle** (about a minute to wake). Free
+Postgres **expires after 30 days** — before that, create a [Neon](https://neon.tech)
+project (also free, signup open) and paste its URL into `DATABASE_URL`. Keep panoramas
+at 2K so Sharp fits in 512 MB.
+
+Local default (`npm run dev`) is unchanged: three processes + MinIO + Redis.
+
 Run **three independent services** from the same repo build (`npm ci && npm run build`):
 
 | Service | Command                                                                                 | Scale                                                                                                                  |
@@ -292,6 +313,11 @@ release in-flight jobs; the sweeper recovers anything interrupted).
 **Routing.** Serve the SPA and API from one origin (`https://tours.example.com` → web, `/api/*` →
 API) so cookies stay first-party. Set `WEB_ORIGIN` and `CORS_ORIGINS` to that origin,
 `TRUST_PROXY` to the number of proxies, and `NODE_ENV=production`.
+
+**Storage without S3 (Oracle VM, etc.).** Set `STORAGE_DRIVER=database` and a long `STORAGE_SECRET`
+on both API and worker. Skip MinIO. Images live in Postgres (`stored_objects`). Serve the SPA and
+API from one origin so `/api/media/…` loads. Fine for a first deploy; move to object storage when
+the database gets large.
 
 **Storage (AWS S3).**
 

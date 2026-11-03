@@ -40,9 +40,9 @@ export async function bootStack(
   const logger = createLogger({ name: 'itest', level: 'fatal' });
   const dbHandle = createDb(config.DATABASE_URL);
   await dbHandle.db.execute(sql`select 1`);
-  const realStorage = createStorage(config);
+  const realStorage = createStorage(config, { db: dbHandle.db });
   const storage = opts.wrapStorage ? opts.wrapStorage(realStorage) : realStorage;
-  const queue = createSceneQueue(config.REDIS_URL, { attempts: 3, backoffMs: 200, prefix });
+  const queue = createSceneQueue(config.REDIS_URL!, { attempts: 3, backoffMs: 200, prefix });
   const workerConfig = loadWorkerConfig({
     ...env,
     JOB_BACKOFF_MS: '200',
@@ -68,7 +68,7 @@ export async function bootStack(
     storage: realStorage,
     worker,
     prefix,
-    redisUrl: config.REDIS_URL,
+    redisUrl: config.REDIS_URL!,
     async close() {
       await worker.close();
       await queue.close();

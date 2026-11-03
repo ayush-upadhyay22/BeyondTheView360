@@ -18,7 +18,7 @@ const dbHandle = createDb(config.DATABASE_URL, { max: config.WORKER_CONCURRENCY 
 const running = startWorker({
   config,
   db: dbHandle.db,
-  storage: createStorage(config),
+  storage: createStorage(config, { db: dbHandle.db }),
   logger,
 });
 
