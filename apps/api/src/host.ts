@@ -101,8 +101,14 @@ const app = createApp({
 
 if (process.env.MIGRATE_ON_START !== '0') {
   const folder = resolve(here, '../../../packages/core/drizzle');
-  await migrate(dbHandle.db, { migrationsFolder: folder });
-  logger.info('database migrations applied');
+  try {
+    await migrate(dbHandle.db, { migrationsFolder: folder });
+    logger.info('database migrations applied');
+  } catch (err) {
+    const cause = err instanceof Error && 'cause' in err ? err.cause : err;
+    console.error('database migrate failed:', cause ?? err);
+    throw err;
+  }
 }
 
 const server = app.listen(config.PORT, '0.0.0.0', () => {
