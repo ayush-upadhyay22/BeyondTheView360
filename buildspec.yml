@@ -1,5 +1,6 @@
-# CodeBuild → zip → Elastic Beanstalk (single-instance free-tier host).
-# Builds the monorepo on CodeBuild so t3.micro does not run TypeScript builds.
+# Optional: use when CodeBuild concurrent-build quota is > 0.
+# Current prod pipeline is Source (GitHub) → Deploy (Elastic Beanstalk) only;
+# the instance builds via .platform/hooks/predeploy/10_build.sh.
 version: 0.2
 
 phases:
@@ -17,7 +18,6 @@ phases:
       - npm run build
   post_build:
     commands:
-      # Drop build-only deps; runtime image keeps production node_modules.
       - npm prune --omit=dev
 
 artifacts:

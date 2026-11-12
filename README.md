@@ -319,6 +319,13 @@ in [`.ebextensions/`](.ebextensions/); resource-backed values come from
 Leave `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` empty so the SDK uses the **instance
 IAM role**. Keep panoramas around 2K so Sharp fits on `t3.micro`.
 
+**CodePipeline (no CodeBuild):** Source (GitHub `main`) → Deploy (Elastic Beanstalk).
+Skip the Build stage while the account CodeBuild concurrent quota is 0. EB installs
+deps with `NPM_USE_PRODUCTION=false` and runs `npm run build` in
+[`.platform/hooks/predeploy/10_build.sh`](.platform/hooks/predeploy/10_build.sh).
+When CodeBuild quota is raised, you can insert a CodeBuild stage and use
+[`buildspec.yml`](buildspec.yml) again.
+
 ### Host for free (Render)
 
 Northflank signup is often closed. Use [Render](https://dashboard.render.com) instead
