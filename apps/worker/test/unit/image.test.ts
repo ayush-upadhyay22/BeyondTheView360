@@ -121,9 +121,10 @@ describe('processPanorama', () => {
     const out = await processPanorama(input, { maxInputPixels: MAX_PIXELS });
     expect(out.width).toBe(4000);
     expect(out.height).toBe(2000);
+    expect(out.variants.map((v) => v.width)).toEqual([1024, 2048, 4000]);
     const meta = await sharp(out.variants.at(-1)!.data).metadata();
-    expect(meta.width).toBe(2048);
-    expect(meta.height).toBe(1024);
+    expect(meta.width).toBe(4000);
+    expect(meta.height).toBe(2000);
   }, 30_000);
 
   it('fails permanently for a portrait photo', async () => {

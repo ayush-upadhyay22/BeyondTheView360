@@ -30,7 +30,7 @@ function CreateTourForm({ used, max }: { used: number; max: number }) {
   const [title, setTitle] = useState('');
   const create = useCreateTour();
   const navigate = useNavigate();
-  const atLimit = used >= max;
+  const atLimit = max > 0 && used >= max;
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -65,6 +65,9 @@ function CreateTourForm({ used, max }: { used: number; max: number }) {
       </button>
       <div className="text-xs text-slate-500 sm:w-40 sm:text-right">
         {used} of {max} tours used
+        {!atLimit && !title.trim() && (
+          <span className="block text-slate-400">Type a name to enable the button</span>
+        )}
         {atLimit && <span className="block text-amber-300">Plan limit reached</span>}
       </div>
       {create.isError && (
@@ -168,7 +171,7 @@ export default function Dashboard() {
   const remove = useDeleteTour();
   const [sharing, setSharing] = useState<TourSummaryDTO | null>(null);
 
-  const maxTours = me.data?.limits.maxTours ?? 0;
+  const maxTours = me.data?.limits.maxTours ?? 3;
 
   function confirmDelete(t: TourSummaryDTO) {
     const ok = window.confirm(

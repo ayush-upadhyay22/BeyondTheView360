@@ -45,11 +45,18 @@ export async function processPanorama(
   }
 
   const input = () =>
-    sharp(original, { limitInputPixels: opts.maxInputPixels, failOn: 'error' }).rotate();
+    sharp(original, {
+      limitInputPixels: opts.maxInputPixels,
+      failOn: 'error',
+      sequentialRead: true,
+    }).rotate();
 
   let meta: sharp.Metadata;
   try {
-    meta = await sharp(original, { limitInputPixels: opts.maxInputPixels }).metadata();
+    meta = await sharp(original, {
+      limitInputPixels: opts.maxInputPixels,
+      sequentialRead: true,
+    }).metadata();
   } catch (err) {
     const msg = err instanceof Error ? err.message : '';
     if (/pixel limit/i.test(msg)) {
@@ -83,14 +90,20 @@ export async function processPanorama(
   try {
     for (const [i, w] of widths.entries()) {
       const data = await toEquirect(w, w / 2)
-        .webp({ quality: w >= 4096 ? 80 : 82, effort: 4, smartSubsample: true })
+        .webp({
+          quality: w >= 4096 ? 90 : 88,
+          effort: 5,
+          smartSubsample: false,
+          preset: 'photo',
+        })
         .toBuffer();
       variants.push({ width: w, data });
       await report(15 + ((i + 1) / widths.length) * 70);
+      await new Promise<void>((resolve) => setImmediate(resolve));
     }
 
     const thumbnail = await toEquirect(THUMBNAIL_WIDTH, THUMBNAIL_WIDTH / 2)
-      .jpeg({ quality: 75, mozjpeg: true })
+      .jpeg({ quality: 84, mozjpeg: true })
       .toBuffer();
     const placeholder = await toEquirect(48, 24)
       .blur(1.2)

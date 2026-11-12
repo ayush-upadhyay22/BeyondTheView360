@@ -137,7 +137,7 @@ export function Uploader({
           </button>
         </p>
         <p className="mt-1 text-xs text-slate-500">
-          Landscape 360° · JPEG, PNG or WebP · up to {formatBytes(maxBytes)}
+          Landscape 360° · JPEG, PNG or WebP · 4K–8K looks sharpest · up to {formatBytes(maxBytes)}
         </p>
         <p className="mt-1 text-xs text-slate-500">
           Rooms are linked in the order you add them, e.g. 01-hall, 02-kitchen.
@@ -166,7 +166,10 @@ export function Uploader({
                   {item.file.name}
                 </span>
                 <span className="shrink-0 text-slate-400">
-                  {item.state === 'uploading' && `${Math.round(item.progress * 100)}%`}
+                  {item.state === 'uploading' &&
+                    (item.progress >= 0.98
+                      ? 'Saving…'
+                      : `${Math.round(item.progress * 100)}%`)}
                   {item.state === 'waiting' && 'Waiting'}
                   {item.state === 'done' && 'Uploaded'}
                   {item.state === 'cancelled' && 'Cancelled'}

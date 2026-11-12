@@ -29,6 +29,24 @@ export type ProcessResult =
 export const TRANSIENT_FAILURE_MESSAGE =
   'Processing failed after several attempts. Please try again in a few minutes.';
 
+const PROCESS_TIMEOUT_MS = Number(process.env.PROCESS_TIMEOUT_MS ?? 180_000);
+
+function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new PermanentError(message)), ms);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 /** Whether this attempt is the job's last one (BullMQ counts attemptsMade after a failure). */
 export function isFinalAttempt(job: Pick<Job, 'attemptsMade' | 'opts'>): boolean {
   return job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
@@ -77,10 +95,14 @@ export function createSceneProcessor(deps: ProcessorDeps) {
       }
 
       log.info({ bytes: original.length }, 'processing panorama');
-      const result = await processPanorama(original, {
-        maxInputPixels: deps.maxInputPixels,
-        onProgress: (p) => setProgress(Math.max(5, Math.min(95, p))),
-      });
+      const result = await withTimeout(
+        processPanorama(original, {
+          maxInputPixels: deps.maxInputPixels,
+          onProgress: (p) => setProgress(Math.max(5, Math.min(95, p))),
+        }),
+        Number.isFinite(PROCESS_TIMEOUT_MS) ? PROCESS_TIMEOUT_MS : 180_000,
+        'This photo is taking too long to process. Try a 4K JPEG export (under 25 MB).',
+      );
 
       // Overwrites are safe, so a retried job simply rewrites the same keys.
       await Promise.all([

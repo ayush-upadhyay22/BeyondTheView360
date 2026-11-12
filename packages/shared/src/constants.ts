@@ -21,6 +21,9 @@ export const NEXT_ARROW_YAW = 0;
 export const BACK_ARROW_YAW = 180;
 
 export const ALLOWED_UPLOAD_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+
+/** Browser → API database storage: keep each request small so free hosts do not time out. */
+export const UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
 export type AllowedUploadType = (typeof ALLOWED_UPLOAD_TYPES)[number];
 
 /** Widths (px) of the WebP variants the worker produces, smallest first. */
@@ -41,7 +44,7 @@ export const MAX_HOTSPOTS_PER_SCENE = 50;
 /** Floor plans are re-encoded to WebP in the browser before upload. */
 export const FLOOR_PLAN_CONTENT_TYPE = 'image/webp';
 export const FLOOR_PLAN_MAX_BYTES = 5 * 1024 * 1024;
-export const FLOOR_PLAN_MAX_SIDE = 2048;
+export const FLOOR_PLAN_MAX_SIDE = 4096;
 
 /** Header that every state-changing request must carry (CSRF defence, see docs/DECISIONS.md). */
 export const CSRF_HEADER = 'x-btv-csrf';

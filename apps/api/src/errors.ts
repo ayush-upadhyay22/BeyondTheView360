@@ -46,6 +46,17 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
       res.status(413).json(errorBody('payload_too_large', 'Request body is too large.'));
       return;
     }
+    if (e?.name === 'MulterError') {
+      const code = (e as { code?: string }).code;
+      if (code === 'LIMIT_FILE_SIZE') {
+        res
+          .status(413)
+          .json(errorBody('file_too_large', 'This file is larger than the 100 MB upload limit.'));
+        return;
+      }
+      res.status(400).json(errorBody('bad_request', 'The upload could not be read. Please try again.'));
+      return;
+    }
     if (e?.type === 'entity.parse.failed') {
       res.status(400).json(errorBody('invalid_json', 'Request body is not valid JSON.'));
       return;

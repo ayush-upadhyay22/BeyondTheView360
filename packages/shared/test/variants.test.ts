@@ -24,9 +24,10 @@ const phone: DeviceProfile = {
 };
 
 describe('variantWidthsFor', () => {
-  it('never upscales', () => {
+  it('never upscales and keeps the native width between steps', () => {
     expect(variantWidthsFor(2048)).toEqual([1024, 2048]);
-    expect(variantWidthsFor(6000)).toEqual([1024, 2048, 4096]);
+    expect(variantWidthsFor(4000)).toEqual([1024, 2048, 4000]);
+    expect(variantWidthsFor(6000)).toEqual([1024, 2048, 4096, 6000]);
     expect(variantWidthsFor(8192)).toEqual([1024, 2048, 4096, 8192]);
     expect(variantWidthsFor(16384)).toEqual([1024, 2048, 4096, 8192]);
   });
@@ -36,12 +37,9 @@ describe('targetVariantWidth', () => {
   it('uses ~2048 on phones even with high DPR', () => {
     expect(targetVariantWidth(phone)).toBe(2048);
   });
-  it('uses 4096 on regular desktops', () => {
-    expect(targetVariantWidth(desktop)).toBe(4096);
-  });
-  it('uses 8192 on large / high-DPI screens', () => {
+  it('uses 8192 on desktops so the native export is shown', () => {
+    expect(targetVariantWidth(desktop)).toBe(8192);
     expect(targetVariantWidth({ ...desktop, screenWidth: 2560, devicePixelRatio: 2 })).toBe(8192);
-    expect(targetVariantWidth({ ...desktop, screenWidth: 3840, screenHeight: 2160 })).toBe(8192);
   });
   it('uses 8192 when explicitly requested', () => {
     expect(targetVariantWidth({ ...phone, preferHighest: true })).toBe(8192);
@@ -52,8 +50,8 @@ describe('selectVariant', () => {
   it('picks 2048 on phones', () => {
     expect(selectVariant(all, phone)?.width).toBe(2048);
   });
-  it('picks 4096 on desktop', () => {
-    expect(selectVariant(all, desktop)?.width).toBe(4096);
+  it('picks 8192 on desktop', () => {
+    expect(selectVariant(all, desktop)?.width).toBe(8192);
   });
   it('respects the GPU texture limit even when HD is requested', () => {
     expect(
@@ -67,7 +65,7 @@ describe('selectVariant', () => {
     expect(selectVariant([{ width: 4096 }, { width: 8192 }], phone)?.width).toBe(4096);
   });
   it('handles unsorted input and empty lists', () => {
-    expect(selectVariant([...all].reverse(), desktop)?.width).toBe(4096);
+    expect(selectVariant([...all].reverse(), desktop)?.width).toBe(8192);
     expect(selectVariant([], desktop)).toBeUndefined();
   });
 });

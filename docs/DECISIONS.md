@@ -153,7 +153,8 @@ after `PENDING_UPLOAD_TTL_HOURS`. Multiple workers sweeping concurrently is safe
 **D28. Image pipeline.** Magic bytes are checked first (JPEG/PNG/WebP only; the declared
 `Content-Type` is not trusted), then sharp metadata must agree with the detected format. EXIF
 orientation is applied before validation and baked into pixels. Variants are produced from the
-original for each width ≤ the 2:1 letterbox canvas (fit: contain, dark bars, never stretched), as WebP; plus a 320×160 mozjpeg
+original for each step width plus the native even canvas width (so a 4000 px export is not
+rounded down to 2048), as high-quality WebP (q 88–90, photo preset, no chroma subsample); plus a 320×160 mozjpeg
 thumbnail and a 48×24 blurred WebP placeholder (stored in S3 and inlined in the DB as a data URL
 for instant display). sharp drops all metadata (EXIF, GPS, XMP) by default; a unit test asserts
 it. `limitInputPixels` guards against decompression bombs. `sharp.concurrency` is divided by the
@@ -185,7 +186,7 @@ that faces real north). When following a link, the viewer keeps the user's compa
 scenes (`newYaw = oldYaw − oldNorth + newNorth`) unless the target scene has an explicit start view.
 
 **D34. Progressive loading.** Show the inline blurred placeholder immediately, then the variant
-picked by `selectVariant` (≈2048 on phones, 4096 on desktop, 8192 on ≥3840 physical px or when the
+picked by `selectVariant` (≈2048 on phones, largest available up to 8192 on desktop or when the
 user presses HD), capped by `gl.MAX_TEXTURE_SIZE`. Textures are cached in a small LRU (5) keyed by
 `sceneId:width` — not by URL, because signed URLs change — and linked scenes are preloaded.
 

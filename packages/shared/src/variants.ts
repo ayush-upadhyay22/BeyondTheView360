@@ -1,8 +1,15 @@
 import { VARIANT_WIDTHS } from './constants.js';
 
-/** Variant widths the worker should produce for an original of the given width (never upscale). */
+/**
+ * Variant widths the worker should produce for an original of the given width (never upscale).
+ * Always keeps the native even width so a 4000 px export is not rounded down to 2048.
+ */
 export function variantWidthsFor(originalWidth: number): number[] {
-  return VARIANT_WIDTHS.filter((w) => w <= originalWidth);
+  const cap = Math.min(originalWidth, VARIANT_WIDTHS[VARIANT_WIDTHS.length - 1]!);
+  const native = cap - (cap % 2);
+  const widths: number[] = VARIANT_WIDTHS.filter((w) => w < native);
+  if (native >= VARIANT_WIDTHS[0]!) widths.push(native);
+  return widths;
 }
 
 export interface DeviceProfile {
@@ -17,19 +24,11 @@ export interface DeviceProfile {
   preferHighest?: boolean;
 }
 
-/** Physical pixel size at which a screen counts as "large" and earns the 8192 px variant. */
-export const LARGE_SCREEN_PHYSICAL_PX = 3840;
-
-/**
- * Ideal texture width for the device:
- * phones ≈ 2048, desktops ≈ 4096, 8192 only on request or on very large/high-DPI screens.
- */
+/** Ideal texture width: phones ≈ 2048, desktop / HD = the largest we produce (8192). */
 export function targetVariantWidth(device: DeviceProfile): number {
   if (device.preferHighest) return 8192;
   if (device.isMobile) return 2048;
-  const physical =
-    Math.max(device.screenWidth, device.screenHeight) * Math.max(1, device.devicePixelRatio);
-  return physical >= LARGE_SCREEN_PHYSICAL_PX ? 8192 : 4096;
+  return 8192;
 }
 
 /**

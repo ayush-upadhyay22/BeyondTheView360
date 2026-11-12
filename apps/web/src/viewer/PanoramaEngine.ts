@@ -133,7 +133,7 @@ export class PanoramaEngine {
     this.camera = new THREE.PerspectiveCamera(this.fov, 1, 0.1, 1100);
     this.stereo.eyeSep = 0.064;
 
-    const geometry = new THREE.SphereGeometry(500, 96, 64);
+    const geometry = new THREE.SphereGeometry(500, 160, 96);
     geometry.scale(-1, 1, 1); // view the sphere from inside
     this.material = new THREE.MeshBasicMaterial({ color: 0x0b1220 });
     this.sphere = new THREE.Mesh(geometry, this.material);
@@ -374,8 +374,9 @@ export class PanoramaEngine {
         (texture) => {
           texture.colorSpace = THREE.SRGBColorSpace;
           texture.minFilter = THREE.LinearFilter;
+          texture.magFilter = THREE.LinearFilter;
           texture.generateMipmaps = false;
-          texture.anisotropy = Math.min(4, this.renderer.capabilities.getMaxAnisotropy());
+          texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
           this.textures.set(key, { texture, lastUsed: performance.now() });
           this.evict();
           resolve(texture);

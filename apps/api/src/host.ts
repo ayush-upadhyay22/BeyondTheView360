@@ -5,6 +5,7 @@
  */
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import sharp from 'sharp';
 import { sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import type { Job } from 'bullmq';
@@ -48,6 +49,9 @@ const logger = createLogger({
   level: config.LOG_LEVEL,
   pretty: config.NODE_ENV === 'development',
 });
+
+sharp.cache({ memory: 32, files: 0, items: 10 });
+sharp.concurrency(1);
 
 const dbHandle = createDb(config.DATABASE_URL);
 const storage = createStorage(config, { db: dbHandle.db });

@@ -33,7 +33,10 @@ export function createApp(deps: AppDeps): Express {
     pinoHttp({
       logger,
       genReqId: (req) => (req.headers['x-request-id'] as string | undefined) ?? randomUUID(),
-      autoLogging: { ignore: (req) => req.url?.startsWith('/api/healthz') ?? false },
+      autoLogging: {
+        ignore: (req) =>
+          (req.url?.startsWith('/api/healthz') || req.url?.startsWith('/api/storage/')) ?? false,
+      },
       customLogLevel: (_req, res, err) =>
         err || res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info',
       serializers: {

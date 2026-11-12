@@ -34,7 +34,7 @@ export async function encodeFloorPlan(
   ctx.drawImage(bitmap, 0, 0, width, height);
   bitmap.close();
   const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, FLOOR_PLAN_CONTENT_TYPE, 0.9),
+    canvas.toBlob(resolve, FLOOR_PLAN_CONTENT_TYPE, 0.95),
   );
   if (!blob || blob.type !== FLOOR_PLAN_CONTENT_TYPE) {
     throw new Error(
