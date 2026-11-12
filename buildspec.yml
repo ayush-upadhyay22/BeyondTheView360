@@ -1,0 +1,33 @@
+# CodeBuild → zip → Elastic Beanstalk (single-instance free-tier host).
+# Builds the monorepo on CodeBuild so t3.micro does not run TypeScript builds.
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 20
+    commands:
+      - node -v
+      - npm -v
+  pre_build:
+    commands:
+      - npm ci
+  build:
+    commands:
+      - npm run build
+  post_build:
+    commands:
+      # Drop build-only deps; runtime image keeps production node_modules.
+      - npm prune --omit=dev
+
+artifacts:
+  files:
+    - '**/*'
+  exclude-paths:
+    - .git/**/*
+    - .github/**/*
+    - samples/**/*
+    - docs/**/*
+    - .env*
+    - docker-compose.yml
+    - render.yaml

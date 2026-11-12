@@ -169,6 +169,7 @@ development). Production must provide real values via the environment.
 | `QUEUE_PREFIX`                              | api, worker          | `btv`                     | BullMQ key namespace; must match between API and worker                                   |
 | `CORS_ORIGINS`                              | api                  | `http://localhost:5173,…` | Browser origins allowed to call the API with credentials                                  |
 | `WEB_ORIGIN`                                | api                  | `http://localhost:5173`   | Public origin of the web app                                                              |
+| `AWS_APP_URL` / `EB_PUBLIC_URL`             | host                 | empty                     | Optional; when set, fills `WEB_ORIGIN` / `CORS_ORIGINS` on AWS if those are unset         |
 | `TRUST_PROXY`                               | api                  | `0`                       | Number of proxies in front of the API (client IPs for rate limiting)                      |
 | `SESSION_TTL_DAYS`                          | api                  | `30`                      | Session lifetime                                                                          |
 | `COOKIE_SECURE`                             | api                  | `false` (`true` in prod)  | `Secure` flag on the session cookie                                                       |
@@ -215,6 +216,8 @@ packages/
   shared/       Browser-safe: zod schemas, DTO types, constants, geometry, variant selection
   core/         Server-only: env, logger, Drizzle schema + migrations, storage drivers, queue, plans
 docker/         MinIO CORS rules
+aws/            CloudFormation (S3 + STORAGE_SECRET) for Elastic Beanstalk
+.ebextensions/  EB env defaults injected on `eb create` / `eb deploy`
 docs/           DECISIONS.md, API.md
 samples/        Test images (git-ignored)
 docker-compose.yml   Postgres, Redis, MinIO, one-shot bucket/CORS setup
@@ -278,6 +281,43 @@ All endpoints are under `/api`; see [`docs/API.md`](docs/API.md) for bodies, res
 | Start from scratch                            | `npm run docker:reset && npm run docker:up && npm run db:migrate && npm run db:seed`                                                                                                            |
 
 ## Deploying to production
+
+### Host on AWS (free-tier friendly)
+
+One process on **Elastic Beanstalk** (API + website + inline image worker). **RDS
+Postgres** for data, **S3** for panoramas, **no Redis / ElastiCache**. Env defaults are
+in [`.ebextensions/`](.ebextensions/); resource-backed values come from
+[`aws/cloudformation.yml`](aws/cloudformation.yml). Full variable list:
+[`apps/api/.env.aws.example`](apps/api/.env.aws.example).
+
+1. Create a free-tier **RDS PostgreSQL 16** instance (`db.t3.micro` / `db.t4g.micro`).
+2. Deploy supporting resources:
+   ```bash
+   aws cloudformation deploy \
+     --template-file aws/cloudformation.yml \
+     --stack-name beyond-the-view-360 \
+     --parameter-overrides WebOrigin=https://YOUR_ENV.REGION.elasticbeanstalk.com
+   ```
+3. Attach the stack’s **instance policy** to the EB EC2 instance profile (S3 + secret read).
+4. From the repo root:
+   ```bash
+   eb init -p "Node.js 20" beyond-the-view-360
+   eb create beyond-the-view-360 --single --instance-type t3.micro
+   ```
+   `.ebextensions/` injects `NODE_ENV`, `QUEUE_DRIVER=inline`, `STORAGE_DRIVER=s3`,
+   `MIGRATE_ON_START`, health check `/api/healthz`, and the other non-secret defaults.
+5. Set resource URLs (use the stack **EbSetenvCommand** output, or):
+   ```bash
+   eb setenv \
+     DATABASE_URL='postgres://USER:PASS@RDS_HOST:5432/btv?sslmode=require' \
+     S3_BUCKET='…' S3_REGION='…' STORAGE_SECRET='…' \
+     WEB_ORIGIN='https://YOUR_EB_URL' CORS_ORIGINS='https://YOUR_EB_URL' \
+     AWS_APP_URL='https://YOUR_EB_URL' CSP_MEDIA_ORIGINS='https://BUCKET.s3.…'
+   ```
+6. Open the EB URL → `/api/healthz` should return `{"ok":true}`. Sign up and create a tour.
+
+Leave `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` empty so the SDK uses the **instance
+IAM role**. Keep panoramas around 2K so Sharp fits on `t3.micro`.
 
 ### Host for free (Render)
 

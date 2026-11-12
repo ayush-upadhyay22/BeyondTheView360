@@ -124,7 +124,9 @@ will grow the database. Switch to S3 later by changing the env and leaving the t
 
 **D23b. One-process free host.** `apps/api/src/host.ts` serves the API and the built SPA and
 runs the panorama processor in-process (`QUEUE_DRIVER=inline`). That fits a free Northflank
-Sandbox service plus its one Postgres addon. Not for scale: one Sharp job at a time, no Redis.
+Sandbox service plus its one Postgres addon, or AWS Elastic Beanstalk + RDS with
+`STORAGE_DRIVER=s3` and an instance IAM role (see `.ebextensions/` and `aws/cloudformation.yml`).
+Not for scale: one Sharp job at a time, no Redis.
 
 ## Phase 4 — Queue, worker & image pipeline
 

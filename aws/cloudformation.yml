@@ -1,0 +1,138 @@
+# BeyondTheView360 — AWS free-tier supporting resources
+# Creates a private S3 media bucket + STORAGE_SECRET, then prints every
+# Elastic Beanstalk env var to set (or re-apply) on the environment.
+#
+# App env defaults also live in .ebextensions/ so `eb create` / `eb deploy`
+# injects them automatically. This stack supplies the resource-backed values
+# (bucket name, region, secret).
+#
+#   aws cloudformation deploy \
+#     --template-file aws/cloudformation.yml \
+#     --stack-name beyond-the-view-360 \
+#     --parameter-overrides WebOrigin=https://YOUR_EB_URL.REGION.elasticbeanstalk.com
+#
+# Then create RDS Postgres (db.t3.micro / db.t4g.micro) in the console and:
+#   eb setenv DATABASE_URL=postgres://USER:PASS@RDS_HOST:5432/btv?sslmode=require \
+#     S3_BUCKET=... S3_REGION=... STORAGE_SECRET=... WEB_ORIGIN=... CORS_ORIGINS=... AWS_APP_URL=... \
+#     CSP_MEDIA_ORIGINS=...
+# (exact command is in stack Outputs → EbSetenvCommand)
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: BeyondTheView360 S3 media bucket + storage secret for Elastic Beanstalk
+
+Parameters:
+  BucketNamePrefix:
+    Type: String
+    Default: beyond-the-view-360
+    Description: Prefix for the media bucket (account id is appended for uniqueness)
+  WebOrigin:
+    Type: String
+    Default: '*'
+    Description: >-
+      Browser origin allowed in S3 CORS (your https EB URL). Use * only until the
+      EB CNAME is known, then update the stack with the real origin.
+
+Resources:
+  MediaBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${BucketNamePrefix}-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipart
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: [GET, POST, HEAD]
+            AllowedOrigins:
+              - !Ref WebOrigin
+            ExposedHeaders: [ETag]
+            MaxAge: 600
+
+  StorageSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${BucketNamePrefix}/storage-secret'
+      Description: STORAGE_SECRET for BeyondTheView360
+      GenerateSecretString:
+        PasswordLength: 48
+        ExcludePunctuation: true
+
+  MediaBucketUserPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub '${BucketNamePrefix}-media-access'
+      Description: Attach to the Elastic Beanstalk EC2 instance profile
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ApiObjects
+            Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+              - s3:DeleteObject
+            Resource: !Sub '${MediaBucket.Arn}/*'
+          - Sid: ReadStorageSecret
+            Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: !Ref StorageSecret
+
+Outputs:
+  MediaBucketName:
+    Value: !Ref MediaBucket
+  MediaBucketRegion:
+    Value: !Ref AWS::Region
+  StorageSecretArn:
+    Value: !Ref StorageSecret
+  InstancePolicyArn:
+    Value: !Ref MediaBucketUserPolicy
+  CspMediaOrigins:
+    Value: !Sub
+      - 'https://${Bucket}.s3.amazonaws.com,https://${Bucket}.s3.${Region}.amazonaws.com'
+      - Bucket: !Ref MediaBucket
+        Region: !Ref AWS::Region
+  EbSetenvCommand:
+    Description: Run after RDS exists and the EB app environment is created
+    Value: !Sub
+      - >-
+        eb setenv
+        NODE_ENV=production
+        TRUST_PROXY=1
+        COOKIE_SECURE=true
+        QUEUE_DRIVER=inline
+        STORAGE_DRIVER=s3
+        S3_BUCKET=${Bucket}
+        S3_REGION=${Region}
+        S3_FORCE_PATH_STYLE=false
+        S3_ENDPOINT=
+        S3_ACCESS_KEY_ID=
+        S3_SECRET_ACCESS_KEY=
+        MIGRATE_ON_START=1
+        MAX_INPUT_PIXELS=16777216
+        LOG_LEVEL=info
+        SESSION_TTL_DAYS=30
+        RATE_LIMIT_ENABLED=true
+        EMBED_FRAME_ANCESTORS=*
+        CSP_MEDIA_ORIGINS=https://${Bucket}.s3.amazonaws.com,https://${Bucket}.s3.${Region}.amazonaws.com
+        STORAGE_SECRET=$(aws secretsmanager get-secret-value --secret-id ${SecretArn} --query SecretString --output text)
+        DATABASE_URL=postgres://USER:PASS@RDS_HOST:5432/btv?sslmode=require
+        WEB_ORIGIN=https://YOUR_EB_URL
+        CORS_ORIGINS=https://YOUR_EB_URL
+        AWS_APP_URL=https://YOUR_EB_URL
+      - Bucket: !Ref MediaBucket
+        Region: !Ref AWS::Region
+        SecretArn: !Ref StorageSecret
