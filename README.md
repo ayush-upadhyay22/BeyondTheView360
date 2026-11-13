@@ -320,11 +320,12 @@ Leave `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` empty so the SDK uses the **in
 IAM role**. Keep panoramas around 2K so Sharp fits on `t3.micro`.
 
 **CodePipeline (no CodeBuild):** Source (GitHub `main`) → Deploy (Elastic Beanstalk).
-Skip the Build stage while the account CodeBuild concurrent quota is 0. EB installs
-deps with `NPM_USE_PRODUCTION=false` and runs `npm run build` in
-[`.platform/hooks/predeploy/10_build.sh`](.platform/hooks/predeploy/10_build.sh).
-When CodeBuild quota is raised, you can insert a CodeBuild stage and use
-[`buildspec.yml`](buildspec.yml) again.
+Skip the Build stage while the account CodeBuild concurrent quota is 0. On AL2023
+Node platforms, start the app with [`Procfile`](Procfile) only (no `NodeCommand` /
+`NPM_USE_PRODUCTION` — those fail validation). [`.npmrc`](.npmrc) keeps
+devDependencies available; [`.platform/hooks/predeploy/10_build.sh`](.platform/hooks/predeploy/10_build.sh)
+runs `npm ci --include=dev` and `npm run build` on the instance. When CodeBuild
+quota is raised, add a CodeBuild stage and use [`buildspec.yml`](buildspec.yml).
 
 ### Host for free (Render)
 
