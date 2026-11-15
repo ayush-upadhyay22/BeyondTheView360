@@ -118,19 +118,24 @@ export function databaseStorageRouter(storage: DatabaseStorageDriver): Router {
         );
         if (problem) throw badRequest(problem);
 
-        const declaredType = file.mimetype || field(req, 'Content-Type');
+        // Prefer the signed form Content-Type (set at presign). Chunked Blob parts often
+        // arrive as application/octet-stream with filename "blob", which must not reject JPEGs.
+        const formType = field(req, 'Content-Type');
+        const partType = file.mimetype || '';
         const type =
-          normalizeUploadContentType(declaredType, file.originalname) ??
-          (declaredType && ACCEPT.has(declaredType) ? declaredType : null);
-        if (declaredType && !type) {
+          normalizeUploadContentType(formType, file.originalname) ??
+          (formType && ACCEPT.has(formType) ? formType : null) ??
+          (partType && partType !== 'application/octet-stream'
+            ? normalizeUploadContentType(partType, file.originalname)
+            : null) ??
+          (partType && ACCEPT.has(partType) ? partType : null);
+        if (!type) {
           throw badRequest('Only JPEG, PNG and WebP images are supported.');
         }
 
         if (!chunked || chunkIndex === null || chunkTotal === null) {
           const body = await readFile(file.path);
-          await storage.put(key, body, {
-            contentType: type || declaredType || 'application/octet-stream',
-          });
+          await storage.put(key, body, { contentType: type });
           res.status(204).end();
           return;
         }
@@ -168,9 +173,7 @@ export function databaseStorageRouter(storage: DatabaseStorageDriver): Router {
         const finalProblem = storage.verifyUploadToken(key, token, size);
         if (finalProblem) throw badRequest(finalProblem);
         const body = await readFile(assembled);
-        await storage.put(key, body, {
-          contentType: type || declaredType || 'application/octet-stream',
-        });
+        await storage.put(key, body, { contentType: type });
         await rm(dir, { recursive: true, force: true }).catch(() => undefined);
         res.status(204).end();
       } finally {

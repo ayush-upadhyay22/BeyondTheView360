@@ -118,11 +118,19 @@ function buildForm(
   fields: Record<string, string>,
   file: Blob,
   extra: Record<string, string> = {},
+  filename = 'upload.bin',
 ): FormData {
   const form = new FormData();
   for (const [k, v] of Object.entries(fields)) form.append(k, v);
   for (const [k, v] of Object.entries(extra)) form.append(k, v);
-  form.append('file', file);
+  // Pass an explicit filename so multer/originalname is not "blob" on sliced chunks.
+  const named =
+    file instanceof File
+      ? file
+      : new File([file], filename, {
+          type: fields['Content-Type'] || file.type || 'application/octet-stream',
+        });
+  form.append('file', named, named.name);
   return form;
 }
 
@@ -131,17 +139,23 @@ async function postChunked(
   file: Blob,
   onProgress: (fraction: number) => void,
   signal?: AbortSignal,
+  filename = 'upload.bin',
 ): Promise<void> {
   const total = Math.max(1, Math.ceil(file.size / UPLOAD_CHUNK_BYTES));
   let restart = 0;
   for (let i = 0; i < total; ) {
     const start = i * UPLOAD_CHUNK_BYTES;
     const part = file.slice(start, Math.min(file.size, start + UPLOAD_CHUNK_BYTES));
-    const form = buildForm(upload.fields, part, {
-      chunkIndex: String(i),
-      chunkTotal: String(total),
-      size: String(file.size),
-    });
+    const form = buildForm(
+      upload.fields,
+      part,
+      {
+        chunkIndex: String(i),
+        chunkTotal: String(total),
+        size: String(file.size),
+      },
+      filename,
+    );
     try {
       await postForm(
         upload.url,
@@ -178,13 +192,14 @@ export async function postToStorage(
   onProgress: (fraction: number) => void,
   signal?: AbortSignal,
 ): Promise<void> {
+  const filename = file instanceof File && file.name ? file.name : 'upload.bin';
   if (isApiStorageUrl(upload.url) && file.size > UPLOAD_CHUNK_BYTES) {
-    await postChunked(upload, file, onProgress, signal);
+    await postChunked(upload, file, onProgress, signal, filename);
     return;
   }
   await postForm(
     upload.url,
-    buildForm(upload.fields, file, { size: String(file.size) }),
+    buildForm(upload.fields, file, { size: String(file.size) }, filename),
     onProgress,
     signal,
     5 * 60_000,
