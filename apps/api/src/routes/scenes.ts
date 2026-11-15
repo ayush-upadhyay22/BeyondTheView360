@@ -169,14 +169,16 @@ export function scenesRouter(deps: AppDeps): Router {
     }),
   );
 
-  /** Re-run processing for a failed scene (e.g. after a transient outage). */
+  /** Re-run processing for a failed or stuck queued/processing scene (e.g. after host OOM). */
   router.post(
     '/:id/retry',
     deps.limiters.upload,
     ah(async (req, res) => {
       const { id } = parse(uuidParamSchema, req.params);
       const { scene } = await loadOwnedScene(db, id, currentUser(req).id);
-      if (scene.status !== 'failed') throw badRequest('Only failed scenes can be retried.');
+      if (scene.status !== 'failed' && scene.status !== 'queued' && scene.status !== 'processing') {
+        throw badRequest('Only failed or stuck scenes can be retried.');
+      }
       if (!(await storage.head(scene.originalKey))) {
         throw conflict('upload_missing', 'The original file is gone. Please upload it again.');
       }

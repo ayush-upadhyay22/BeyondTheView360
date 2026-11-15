@@ -89,10 +89,12 @@ export async function processPanorama(
   const variants: ProcessedPanorama['variants'] = [];
   try {
     for (const [i, w] of widths.entries()) {
+      // effort 5 is heavy on 1 GB free-tier hosts; allow override via SHARP_WEBP_EFFORT.
+      const effort = Math.min(6, Math.max(0, Number(process.env.SHARP_WEBP_EFFORT ?? 3)));
       const data = await toEquirect(w, w / 2)
         .webp({
           quality: w >= 4096 ? 90 : 88,
-          effort: 5,
+          effort: Number.isFinite(effort) ? effort : 3,
           smartSubsample: false,
           preset: 'photo',
         })

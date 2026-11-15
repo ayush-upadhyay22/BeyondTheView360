@@ -38,12 +38,22 @@ function SceneStatus({ scene, onRetry }: { scene: SceneDTO; onRetry: () => void 
     );
   }
   const pct = Math.round(scene.progress);
+  const canUnstick = scene.status === 'queued' || scene.status === 'processing';
   return (
     <div className="mt-1.5 text-xs text-slate-400" aria-live="polite">
       <div className="flex items-center gap-1.5">
         <Spinner size={12} label={STATUS_LABEL[scene.status]} />
         {STATUS_LABEL[scene.status]}
         {scene.status === 'processing' && ` · ${pct}%`}
+        {canUnstick && (
+          <button
+            type="button"
+            className="ml-auto inline-flex items-center gap-1 text-slate-300 hover:underline"
+            onClick={onRetry}
+          >
+            <RefreshIcon size={12} /> Retry
+          </button>
+        )}
       </div>
       {scene.status === 'processing' && (
         <div className="mt-1 h-1 overflow-hidden rounded bg-ink-600">

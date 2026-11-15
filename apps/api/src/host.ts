@@ -8,7 +8,7 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { sql } from 'drizzle-orm';
+import { and, eq, inArray, lt, sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import type { Job } from 'bullmq';
 import {
@@ -17,6 +17,7 @@ import {
   createStorage,
   loadEnvFiles,
   sceneJobId,
+  scenes,
   storageKeys,
   type ProcessSceneJobData,
 } from '@btv/core';
@@ -112,11 +113,62 @@ const server = app.listen(config.PORT, '0.0.0.0', () => {
   logger.info(`host listening on http://0.0.0.0:${config.PORT}`);
 });
 
+/**
+ * Inline queue lives only in memory. After an OOM/crash/restart, scenes left as
+ * queued/processing would sit forever — re-enqueue them (startup: all; later: stale only).
+ */
+async function recoverStuckScenes(opts: { maxAgeMs: number }): Promise<number> {
+  const filters = [inArray(scenes.status, ['queued', 'processing'])];
+  if (opts.maxAgeMs > 0) {
+    filters.push(lt(scenes.updatedAt, new Date(Date.now() - opts.maxAgeMs)));
+  }
+  const rows = await dbHandle.db
+    .select({ id: scenes.id, status: scenes.status })
+    .from(scenes)
+    .where(and(...filters))
+    .limit(100);
+
+  for (const row of rows) {
+    if (row.status === 'processing') {
+      await dbHandle.db
+        .update(scenes)
+        .set({ status: 'queued', progress: 0, error: null, queuedAt: new Date() })
+        .where(eq(scenes.id, row.id));
+    }
+    await queue.enqueue(row.id);
+  }
+  if (rows.length) {
+    logger.warn({ count: rows.length }, 'recovered stuck scenes for inline queue');
+  }
+  return rows.length;
+}
+
+void recoverStuckScenes({ maxAgeMs: 0 }).catch((err: unknown) =>
+  logger.error({ err }, 'startup stuck-scene recovery failed'),
+);
+
+const stuckMinutes = Number(process.env.STUCK_SCENE_MINUTES ?? 2);
+const sweepMs = Number(process.env.SWEEP_INTERVAL_SECONDS ?? 60) * 1000;
+let sweeping = false;
+const sweepTimer = setInterval(() => {
+  if (sweeping) return;
+  sweeping = true;
+  void recoverStuckScenes({
+    maxAgeMs: Math.max(1, stuckMinutes) * 60_000,
+  })
+    .catch((err: unknown) => logger.error({ err }, 'stuck-scene sweep failed'))
+    .finally(() => {
+      sweeping = false;
+    });
+}, Number.isFinite(sweepMs) && sweepMs >= 15_000 ? sweepMs : 60_000);
+sweepTimer.unref();
+
 let shuttingDown = false;
 async function shutdown(signal: string) {
   if (shuttingDown) return;
   shuttingDown = true;
   logger.info({ signal }, 'shutting down host');
+  clearInterval(sweepTimer);
   const force = setTimeout(() => process.exit(1), 60_000);
   force.unref();
   server.close(async () => {
