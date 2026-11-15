@@ -146,7 +146,7 @@ export function Uploader({
           ref={inputRef}
           type="file"
           multiple
-          accept={ALLOWED_UPLOAD_TYPES.join(',')}
+          accept={`.jpg,.jpeg,.png,.webp,${ALLOWED_UPLOAD_TYPES.join(',')}`}
           className="sr-only"
           tabIndex={-1}
           aria-label="Choose panorama files"

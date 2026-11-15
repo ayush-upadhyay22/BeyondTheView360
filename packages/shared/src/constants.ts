@@ -26,6 +26,35 @@ export const ALLOWED_UPLOAD_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as
 export const UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
 export type AllowedUploadType = (typeof ALLOWED_UPLOAD_TYPES)[number];
 
+/**
+ * Map browser/OS MIME quirks to a canonical allowed type.
+ * Some environments report `.jpg` as `image/jpg` or leave `File.type` empty.
+ */
+export function normalizeUploadContentType(
+  type: string | undefined | null,
+  filename?: string,
+): AllowedUploadType | null {
+  const raw = (type ?? '').trim().toLowerCase();
+  const mapped =
+    raw === 'image/jpg' || raw === 'image/pjpeg'
+      ? 'image/jpeg'
+      : raw === 'image/x-png'
+        ? 'image/png'
+        : raw;
+
+  if ((ALLOWED_UPLOAD_TYPES as readonly string[]).includes(mapped)) {
+    return mapped as AllowedUploadType;
+  }
+
+  const ext = filename?.includes('.')
+    ? filename.slice(filename.lastIndexOf('.')).toLowerCase()
+    : '';
+  if (ext === '.jpg' || ext === '.jpeg' || ext === '.jpe') return 'image/jpeg';
+  if (ext === '.png') return 'image/png';
+  if (ext === '.webp') return 'image/webp';
+  return null;
+}
+
 /** Widths (px) of the WebP variants the worker produces, smallest first. */
 export const VARIANT_WIDTHS = [1024, 2048, 4096, 8192] as const;
 export const THUMBNAIL_WIDTH = 320;

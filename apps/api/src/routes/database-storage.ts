@@ -5,7 +5,12 @@ import { extname, join } from 'node:path';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import multer from 'multer';
 import { DatabaseStorageDriver } from '@btv/core';
-import { ALLOWED_UPLOAD_TYPES, FLOOR_PLAN_CONTENT_TYPE, UPLOAD_CHUNK_BYTES } from '@btv/shared';
+import {
+  ALLOWED_UPLOAD_TYPES,
+  FLOOR_PLAN_CONTENT_TYPE,
+  UPLOAD_CHUNK_BYTES,
+  normalizeUploadContentType,
+} from '@btv/shared';
 import { badRequest, conflict, HttpError, notFound } from '../errors.js';
 import { ah } from '../middleware.js';
 
@@ -113,14 +118,19 @@ export function databaseStorageRouter(storage: DatabaseStorageDriver): Router {
         );
         if (problem) throw badRequest(problem);
 
-        const type = file.mimetype || field(req, 'Content-Type');
-        if (type && !ACCEPT.has(type)) {
+        const declaredType = file.mimetype || field(req, 'Content-Type');
+        const type =
+          normalizeUploadContentType(declaredType, file.originalname) ??
+          (declaredType && ACCEPT.has(declaredType) ? declaredType : null);
+        if (declaredType && !type) {
           throw badRequest('Only JPEG, PNG and WebP images are supported.');
         }
 
         if (!chunked || chunkIndex === null || chunkTotal === null) {
           const body = await readFile(file.path);
-          await storage.put(key, body, { contentType: type || 'application/octet-stream' });
+          await storage.put(key, body, {
+            contentType: type || declaredType || 'application/octet-stream',
+          });
           res.status(204).end();
           return;
         }
@@ -158,7 +168,9 @@ export function databaseStorageRouter(storage: DatabaseStorageDriver): Router {
         const finalProblem = storage.verifyUploadToken(key, token, size);
         if (finalProblem) throw badRequest(finalProblem);
         const body = await readFile(assembled);
-        await storage.put(key, body, { contentType: type || 'application/octet-stream' });
+        await storage.put(key, body, {
+          contentType: type || declaredType || 'application/octet-stream',
+        });
         await rm(dir, { recursive: true, force: true }).catch(() => undefined);
         res.status(204).end();
       } finally {

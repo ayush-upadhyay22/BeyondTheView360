@@ -71,7 +71,7 @@ export function FloorPlanEditor({
           <input
             ref={fileRef}
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
             className="sr-only"
             onChange={(e) => onFile(e.target.files?.[0])}
           />

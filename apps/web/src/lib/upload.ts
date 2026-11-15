@@ -1,15 +1,21 @@
 import {
   ALLOWED_UPLOAD_TYPES,
   UPLOAD_CHUNK_BYTES,
+  normalizeUploadContentType,
+  type AllowedUploadType,
   type PresignUploadResponse,
   type SceneDTO,
 } from '@btv/shared';
 import { ApiError, del, post } from './api';
 
-export type AllowedType = (typeof ALLOWED_UPLOAD_TYPES)[number];
+export type AllowedType = AllowedUploadType;
 
-export function isAllowedType(type: string): type is AllowedType {
-  return (ALLOWED_UPLOAD_TYPES as readonly string[]).includes(type);
+export function isAllowedType(type: string, filename?: string): type is AllowedType {
+  return normalizeUploadContentType(type, filename) !== null;
+}
+
+export function contentTypeForUpload(file: File): AllowedType | null {
+  return normalizeUploadContentType(file.type, file.name);
 }
 
 export function formatBytes(bytes: number): string {
@@ -21,7 +27,7 @@ export function formatBytes(bytes: number): string {
 
 /** Client-side pre-checks; the worker re-validates everything from the actual bytes. */
 export function precheckFile(file: File, maxBytes: number): string | null {
-  if (!isAllowedType(file.type)) return 'Only JPEG, PNG or WebP images are supported.';
+  if (!contentTypeForUpload(file)) return 'Only JPEG, PNG or WebP images are supported.';
   if (file.size > maxBytes) {
     return `File is ${formatBytes(file.size)}; the limit is ${formatBytes(maxBytes)}.`;
   }
@@ -186,13 +192,14 @@ export async function postToStorage(
 }
 
 export function presignUpload(tourId: string, file: File): Promise<PresignUploadResponse> {
-  if (!isAllowedType(file.type)) {
+  const contentType = contentTypeForUpload(file);
+  if (!contentType) {
     return Promise.reject(new Error('Only JPEG, PNG or WebP images are supported.'));
   }
   return post<PresignUploadResponse>('/scenes/presign', {
     tourId,
     filename: file.name,
-    contentType: file.type,
+    contentType,
     size: file.size,
   });
 }

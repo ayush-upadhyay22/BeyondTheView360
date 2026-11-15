@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { ALLOWED_UPLOAD_TYPES, MAX_FOV, MIN_FOV, TOUR_VISIBILITIES } from './constants.js';
+import {
+  ALLOWED_UPLOAD_TYPES,
+  MAX_FOV,
+  MIN_FOV,
+  TOUR_VISIBILITIES,
+  normalizeUploadContentType,
+} from './constants.js';
 
 const uuid = z.string().uuid();
 const yaw = z.number().finite().min(-180).max(180);
@@ -45,10 +51,22 @@ export const presignUploadSchema = z
   .object({
     tourId: uuid,
     filename: z.string().trim().min(1).max(255),
-    contentType: z.enum(ALLOWED_UPLOAD_TYPES),
+    contentType: z.string().trim().min(1),
     size: z.number().int().positive(),
   })
-  .strict();
+  .strict()
+  .transform((input, ctx) => {
+    const contentType = normalizeUploadContentType(input.contentType, input.filename);
+    if (!contentType) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Only JPEG, PNG or WebP images are supported.',
+        path: ['contentType'],
+      });
+      return z.NEVER;
+    }
+    return { ...input, contentType };
+  });
 
 /** Floor-plan pin, as a fraction of the plan's width/height. */
 const mapCoord = z.number().finite().min(0).max(1);

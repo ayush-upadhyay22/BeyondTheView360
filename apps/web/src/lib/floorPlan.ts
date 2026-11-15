@@ -15,7 +15,7 @@ import { isAllowedType, postToStorage } from './upload';
 export async function encodeFloorPlan(
   file: File,
 ): Promise<{ blob: Blob; width: number; height: number }> {
-  if (!isAllowedType(file.type)) throw new Error('Use a JPEG, PNG or WebP image.');
+  if (!isAllowedType(file.type, file.name)) throw new Error('Use a JPEG, PNG or WebP image.');
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(file);
