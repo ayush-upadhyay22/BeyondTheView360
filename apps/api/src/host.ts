@@ -114,36 +114,38 @@ const server = app.listen(config.PORT, '0.0.0.0', () => {
 });
 
 /**
- * Inline queue lives only in memory. After an OOM/crash/restart, scenes left as
- * queued/processing would sit forever — re-enqueue them (startup: all; later: stale only).
+ * Inline queue is in-memory only. After an OOM/crash, scenes can sit forever in
+ * queued/processing. Do NOT auto-reprocess them on boot — that re-OOMs t3.micro
+ * and causes a 502 crash loop. Mark them failed so the site stays up; users Retry.
  */
-async function recoverStuckScenes(opts: { maxAgeMs: number }): Promise<number> {
+const STUCK_FAIL_MESSAGE =
+  'Processing was interrupted (server ran out of memory or restarted). Click Retry with a smaller 2K–4K panorama.';
+
+async function failStuckScenes(opts: { maxAgeMs: number }): Promise<number> {
   const filters = [inArray(scenes.status, ['queued', 'processing'])];
   if (opts.maxAgeMs > 0) {
     filters.push(lt(scenes.updatedAt, new Date(Date.now() - opts.maxAgeMs)));
   }
   const rows = await dbHandle.db
-    .select({ id: scenes.id, status: scenes.status })
+    .select({ id: scenes.id })
     .from(scenes)
     .where(and(...filters))
     .limit(100);
 
   for (const row of rows) {
-    if (row.status === 'processing') {
-      await dbHandle.db
-        .update(scenes)
-        .set({ status: 'queued', progress: 0, error: null, queuedAt: new Date() })
-        .where(eq(scenes.id, row.id));
-    }
-    await queue.enqueue(row.id);
+    await dbHandle.db
+      .update(scenes)
+      .set({ status: 'failed', progress: 0, error: STUCK_FAIL_MESSAGE })
+      .where(eq(scenes.id, row.id));
   }
   if (rows.length) {
-    logger.warn({ count: rows.length }, 'recovered stuck scenes for inline queue');
+    logger.warn({ count: rows.length }, 'marked stuck scenes as failed (avoid OOM crash loop)');
   }
   return rows.length;
 }
 
-void recoverStuckScenes({ maxAgeMs: 0 }).catch((err: unknown) =>
+// Fail orphans from the previous process after listen is up.
+void failStuckScenes({ maxAgeMs: 0 }).catch((err: unknown) =>
   logger.error({ err }, 'startup stuck-scene recovery failed'),
 );
 
@@ -153,7 +155,7 @@ let sweeping = false;
 const sweepTimer = setInterval(() => {
   if (sweeping) return;
   sweeping = true;
-  void recoverStuckScenes({
+  void failStuckScenes({
     maxAgeMs: Math.max(1, stuckMinutes) * 60_000,
   })
     .catch((err: unknown) => logger.error({ err }, 'stuck-scene sweep failed'))
