@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
-# Build the monorepo on the EB instance (CodePipeline has no CodeBuild stage).
+# Build only what the one-process host needs. EB already ran npm install — do NOT npm ci again
+# (that was hanging/OOM'ing on t3.micro for 5+ minutes).
 set -euo pipefail
-export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=768}"
+export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=512}"
 export NPM_CONFIG_PRODUCTION=false
 
-echo "Ensuring dependencies (including devDeps for TypeScript/Vite builds)…"
-npm ci --include=dev
+echo "predeploy: NODE_OPTIONS=${NODE_OPTIONS}"
+echo "predeploy: building @btv/api (bundles workspace packages into dist/host.js)…"
+npm run build -w @btv/api
 
-echo "Running npm run build (NODE_OPTIONS=${NODE_OPTIONS})"
-npm run build
+echo "predeploy: building @btv/web (SPA → apps/web/dist)…"
+npm run build -w @btv/web
 
-echo "Build complete."
+echo "predeploy: build complete."
+test -f apps/api/dist/host.js
+test -d apps/web/dist
